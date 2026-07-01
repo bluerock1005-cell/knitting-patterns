@@ -1,4 +1,4 @@
-"""gui.pyw - 双击启动编织图纸管理器"""
+"""gui.py - 双击或命令行启动编织图纸管理器"""
 import subprocess
 import sys
 from pathlib import Path
@@ -6,38 +6,33 @@ from pathlib import Path
 HERE = Path(__file__).parent.resolve()
 VENV_DIR = HERE / ".venv"
 VENV_PY = VENV_DIR / "Scripts" / "python.exe"
-VENV_PYW = VENV_DIR / "Scripts" / "pythonw.exe"
 
 
 def main():
     # 第一步：确保虚拟环境存在
     if not VENV_PY.exists():
+        print("正在创建虚拟环境，首次运行需要1-2分钟…")
         subprocess.run(
             [sys.executable, "-m", "venv", str(VENV_DIR)],
-            check=False,
+            check=True,
         )
         subprocess.run(
             [str(VENV_PY), "-m", "pip", "install",
              "PyQt6", "pypdf", "requests", "beautifulsoup4"],
-            check=False,
+            check=True,
         )
-        # 短暂弹窗提示初始化完成
-        subprocess.run(
-            ["msg", "*", "环境初始化完成，请重新双击 gui.pyw"],
-            check=False, timeout=3,
-        )
+        print("初始化完成！请重新运行 gui.py")
+        return
 
-    # 第二步：如果当前不是 venv 的 pythonw，用 venv 重新启动
-    if VENV_PYW.exists() and str(sys.executable).lower() != str(VENV_PYW).lower():
-        subprocess.Popen([str(VENV_PYW), __file__])
+    # 第二步：用 venv 的 python 重新启动自己（如果不是已经在 venv 里）
+    if str(sys.executable).lower() != str(VENV_PY).lower():
+        subprocess.Popen([str(VENV_PY), __file__])
         return
 
     # 第三步：启动管理器
     sys.path.insert(0, str(HERE))
     from PyQt6.QtWidgets import QApplication
     from manager import PatternManager
-
-    HERE.mkdir(exist_ok=True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("编织图纸管理器")
