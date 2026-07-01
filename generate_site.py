@@ -417,11 +417,9 @@ def build_html(patterns):
                 if (p.difficulty) tags.push(`<span class="tag diff-${{p.difficulty}}">${{p.difficulty}}</span>`);
 
                 const hasImage = p.image && p.image.trim() !== '';
+                const imgSrc = hasImage ? `../images/${{encodeURIComponent(p.image)}}` : '';
                 const thumbContent = hasImage
-                    ? `<img src="../images/${{encodeURIComponent(p.image)}}" alt="${{escapeHtml(p.title)}}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">`
-                    : '';
-                const thumbFallback = hasImage
-                    ? `<span class="placeholder" style="display:none">🧶</span>`
+                    ? `<img src="${{imgSrc}}" alt="${{escapeHtml(p.title)}}" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'placeholder\\'>🧶</span>';">`
                     : `<span class="placeholder">🧶</span>`;
 
                 // 解析备注为结构化信息行
@@ -451,7 +449,7 @@ def build_html(patterns):
 
                 return `
                     <div class="card">
-                        <div class="card-thumb">${{thumbContent}}${{thumbFallback}}</div>
+                        <div class="card-thumb">${{thumbContent}}</div>
                         <div class="card-body">
                             <div class="card-title">${{escapeHtml(p.title)}}</div>
                             <div class="tags">${{tags.join('')}}</div>
