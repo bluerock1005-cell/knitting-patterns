@@ -429,8 +429,7 @@ def build_html(patterns):
                     const infoItems = parts.map(part => {{
                         // 给每段加图标和样式
                         let icon = '📌';
-                        if (part.startsWith('类型')) icon = '📂';
-                        else if (part.startsWith('作者')) icon = '✍️';
+                        if (part.startsWith('作者')) icon = '✍️';
                         else if (part.startsWith('建议线材')) icon = '🧵';
                         else if (part.startsWith('密度')) icon = '📐';
                         else if (part.startsWith('针码')) icon = '🪡';

@@ -443,20 +443,10 @@ def map_to_csv_fields(scraped):
     elif "knit" in craft:
         result["category"] = "棒针"
 
-    # ── 类型 ──
-    cat_text = scraped.get("category_text", "").lower()
-    # 按关键词匹配
-    for keyword, cn_type in CATEGORY_TO_TYPE.items():
-        if keyword in cat_text:
-            result["type"] = cn_type
-            break
-    # 如果 category_text 没匹配到，试试 title
-    if not result["type"]:
-        title_lower = scraped.get("title", "").lower()
-        for keyword, cn_type in CATEGORY_TO_TYPE.items():
-            if keyword in title_lower:
-                result["type"] = cn_type
-                break
+    # ── 类型（直接使用 Ravelry 网站的 Category 分类）──
+    cat_text = scraped.get("category_text", "").strip()
+    if cat_text:
+        result["type"] = cat_text
 
     # ── 语言 ──
     langs = scraped.get("languages_raw", "").lower()
@@ -491,11 +481,6 @@ def map_to_csv_fields(scraped):
 
     # ── 备注（简体中文标签）──
     notes_parts = []
-
-    # Ravelry 分类
-    category_text = scraped.get("category_text", "")
-    if category_text:
-        notes_parts.append(f"类型：{category_text}")
 
     # 作者
     designer = scraped.get("designer", "")
