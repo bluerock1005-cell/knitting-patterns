@@ -308,7 +308,22 @@ class PatternDialog(QDialog):
         """网址输入框失焦时，如果有新网址则自动读取"""
         url = self.ravelry_url_input.text().strip()
         if url and url != self._last_fetched_url and "ravelry.com" in url:
+            # 先从 URL 提取名称填入标题
+            self._guess_title_from_url(url)
             self._fetch_ravelry()
+
+    def _guess_title_from_url(self, url):
+        """从 Ravelry URL 的最后一段提取图纸名称"""
+        import re
+        # 匹配 /patterns/library/xxx 或 /patterns/xxx 格式
+        m = re.search(r"/patterns(?:/library)?/([^/]+)/?$", url)
+        if m:
+            name = m.group(1)
+            # 将连字符和下划线替换为空格，首字母大写
+            name = re.sub(r"[-_]+", " ", name).strip()
+            name = " ".join(w.capitalize() for w in name.split())
+            if name and not self.title_input.text().strip():
+                self.title_input.setText(name)
 
     def _fetch_ravelry(self):
         """异步抓取 Ravelry 数据"""
