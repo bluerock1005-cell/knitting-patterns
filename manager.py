@@ -122,109 +122,141 @@ class PatternDialog(QDialog):
 
         is_edit = pattern is not None
         self.setWindowTitle("编辑图纸" if is_edit else "添加图纸")
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(520)
         self.downloaded_image = pattern.get("image", "") if is_edit and pattern else ""
         self._apply_style()
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
-        form.setSpacing(12)
+        layout.setSpacing(14)
 
-        # PDF 文件选择
+        # ═══════════════════════════════
+        #  步骤 1：选择 PDF
+        # ═══════════════════════════════
+        step1_label = QLabel("① 选择 PDF 文件")
+        step1_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY};")
+        layout.addWidget(step1_label)
+
         file_row = QHBoxLayout()
         self.file_label = QLabel(pattern["filename"] if is_edit else "未选择文件")
-        self.file_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px;")
-        self.file_label.setMinimumWidth(200)
-        btn_browse = QPushButton("选择 PDF" if not is_edit else "更换文件")
-        btn_browse.setFixedWidth(100)
+        self.file_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
+        self.file_label.setMinimumWidth(280)
+        btn_browse = QPushButton("📂 选择 PDF" if not is_edit else "📂 更换文件")
+        btn_browse.setFixedWidth(120)
+        btn_browse.setStyleSheet(self._btn_style(primary=True))
         btn_browse.clicked.connect(self._browse_pdf)
         file_row.addWidget(self.file_label)
         file_row.addWidget(btn_browse)
-        file_widget = QWidget()
-        file_widget.setLayout(file_row)
-        form.addRow("PDF 文件:", file_widget)
+        layout.addLayout(file_row)
 
-        # 标题
-        self.title_input = QLineEdit(pattern["title"] if is_edit else "")
-        form.addRow("标题:", self.title_input)
+        # ═══════════════════════════════
+        #  步骤 2：粘贴 Ravelry 网址
+        # ═══════════════════════════════
+        step2_label = QLabel("② 粘贴 Ravelry 网址（可选）")
+        step2_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 6px;")
+        layout.addWidget(step2_label)
 
-        # 分类
-        self.category_combo = QComboBox()
-        self.category_combo.addItem("（未选择）", "")
-        for c in CATEGORIES:
-            self.category_combo.addItem(c, c)
-        if is_edit and pattern["category"]:
-            idx = CATEGORIES.index(pattern["category"]) + 1 if pattern["category"] in CATEGORIES else 0
-            self.category_combo.setCurrentIndex(idx)
-        form.addRow("分类:", self.category_combo)
-
-        # 类型
-        self.type_combo = QComboBox()
-        self.type_combo.addItem("（未选择）", "")
-        for t in TYPES:
-            self.type_combo.addItem(t, t)
-        if is_edit and pattern["type"]:
-            idx = TYPES.index(pattern["type"]) + 1 if pattern["type"] in TYPES else 0
-            self.type_combo.setCurrentIndex(idx)
-        form.addRow("类型:", self.type_combo)
-
-        # 语言
-        self.language_combo = QComboBox()
-        self.language_combo.addItem("（未选择）", "")
-        for l in LANGUAGES:
-            self.language_combo.addItem(l, l)
-        if is_edit and pattern["language"]:
-            idx = LANGUAGES.index(pattern["language"]) + 1 if pattern["language"] in LANGUAGES else 0
-            self.language_combo.setCurrentIndex(idx)
-        form.addRow("语言:", self.language_combo)
-
-        # 难度
-        self.difficulty_combo = QComboBox()
-        self.difficulty_combo.addItem("（未选择）", "")
-        for d in DIFFICULTIES:
-            self.difficulty_combo.addItem(d, d)
-        if is_edit and pattern["difficulty"]:
-            idx = DIFFICULTIES.index(pattern["difficulty"]) + 1 if pattern["difficulty"] in DIFFICULTIES else 0
-            self.difficulty_combo.setCurrentIndex(idx)
-        form.addRow("难度:", self.difficulty_combo)
-
-        # 备注
-        self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
-        self.notes_input.setFixedHeight(60)
-        form.addRow("备注:", self.notes_input)
-
-        # Ravelry 链接（自动获取信息）
         ravelry_row = QHBoxLayout()
         self.ravelry_url_input = QLineEdit()
-        self.ravelry_url_input.setPlaceholderText("粘贴 Ravelry 图案链接，自动获取信息…")
-        self.ravelry_url_input.setStyleSheet("""
-            QLineEdit {
-                padding: 6px 10px;
-                border: 2px solid #e5ddd3;
+        if is_edit and pattern:
+            self.ravelry_url_input.setText(pattern.get("url", ""))
+        self.ravelry_url_input.setPlaceholderText("https://www.ravelry.com/patterns/library/...")
+        self.ravelry_url_input.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 8px 12px;
+                border: 2px solid {COLOR_BORDER};
                 border-radius: 8px;
-                background: #ffffff;
-                color: #3a3027;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
                 font-size: 13px;
-            }
-            QLineEdit:focus {
-                border-color: #b85c5c;
-            }
+            }}
+            QLineEdit:focus {{ border-color: {COLOR_PRIMARY}; }}
         """)
         ravelry_row.addWidget(self.ravelry_url_input)
 
-        self.btn_fetch_ravelry = QPushButton("获取信息")
-        self.btn_fetch_ravelry.setFixedWidth(90)
+        self.btn_fetch_ravelry = QPushButton("🔍 自动读取")
+        self.btn_fetch_ravelry.setFixedWidth(120)
         self.btn_fetch_ravelry.setStyleSheet(self._btn_style(primary=True))
         self.btn_fetch_ravelry.clicked.connect(self._fetch_ravelry)
         ravelry_row.addWidget(self.btn_fetch_ravelry)
 
         self.ravelry_status = QLabel("")
-        self.ravelry_status.setStyleSheet("font-size: 12px; color: #8a7a6a;")
+        self.ravelry_status.setStyleSheet(f"font-size: 12px; color: {COLOR_TEXT_LIGHT};")
         ravelry_row.addWidget(self.ravelry_status)
+        layout.addLayout(ravelry_row)
 
-        ravelry_widget = QWidget()
-        ravelry_widget.setLayout(ravelry_row)
-        form.addRow("Ravelry:", ravelry_widget)
+        # 分隔线
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet(f"color: {COLOR_BORDER}; margin: 4px 0;")
+        layout.addWidget(sep)
+
+        # ═══════════════════════════════
+        #  步骤 3：手动修改关键字信息
+        # ═══════════════════════════════
+        step3_label = QLabel("③ 确认/修改图纸信息")
+        step3_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY};")
+        layout.addWidget(step3_label)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # 标题
+        self.title_input = QLineEdit(pattern["title"] if is_edit else "")
+        self.title_input.setPlaceholderText("图纸名称…")
+        form.addRow("名称:", self.title_input)
+
+        # 分类 + 类型 同行
+        cat_type_row = QHBoxLayout()
+        self.category_combo = QComboBox()
+        self.category_combo.addItem("（分类）", "")
+        for c in CATEGORIES:
+            self.category_combo.addItem(c, c)
+        if is_edit and pattern["category"]:
+            idx = CATEGORIES.index(pattern["category"]) + 1 if pattern["category"] in CATEGORIES else 0
+            self.category_combo.setCurrentIndex(idx)
+        self.category_combo.setMinimumWidth(100)
+        cat_type_row.addWidget(self.category_combo)
+
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("（类型）", "")
+        for t in TYPES:
+            self.type_combo.addItem(t, t)
+        if is_edit and pattern["type"]:
+            idx = TYPES.index(pattern["type"]) + 1 if pattern["type"] in TYPES else 0
+            self.type_combo.setCurrentIndex(idx)
+        self.type_combo.setMinimumWidth(100)
+        cat_type_row.addWidget(self.type_combo)
+
+        # 语言 + 难度 同行
+        self.language_combo = QComboBox()
+        self.language_combo.addItem("（语言）", "")
+        for l in LANGUAGES:
+            self.language_combo.addItem(l, l)
+        if is_edit and pattern["language"]:
+            idx = LANGUAGES.index(pattern["language"]) + 1 if pattern["language"] in LANGUAGES else 0
+            self.language_combo.setCurrentIndex(idx)
+        self.language_combo.setMinimumWidth(100)
+        cat_type_row.addWidget(self.language_combo)
+
+        self.difficulty_combo = QComboBox()
+        self.difficulty_combo.addItem("（难度）", "")
+        for d in DIFFICULTIES:
+            self.difficulty_combo.addItem(d, d)
+        if is_edit and pattern["difficulty"]:
+            idx = DIFFICULTIES.index(pattern["difficulty"]) + 1 if pattern["difficulty"] in DIFFICULTIES else 0
+            self.difficulty_combo.setCurrentIndex(idx)
+        self.difficulty_combo.setMinimumWidth(100)
+        cat_type_row.addWidget(self.difficulty_combo)
+
+        cat_type_widget = QWidget()
+        cat_type_widget.setLayout(cat_type_row)
+        form.addRow("属性:", cat_type_widget)
+
+        # 备注
+        self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
+        self.notes_input.setPlaceholderText("作者、线材、密度、针码、用量、尺码…")
+        self.notes_input.setFixedHeight(80)
+        form.addRow("备注:", self.notes_input)
 
         layout.addLayout(form)
 
