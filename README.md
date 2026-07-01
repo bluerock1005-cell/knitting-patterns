@@ -10,7 +10,8 @@ knitting-patterns/
 │   └── TwistVeil_Blouse.pdf
 ├── patterns.csv         # 图纸清单（标题、分类、难度等）
 ├── generate_site.py     # 网页生成脚本
-├── scan_patterns.py     # 扫描文件夹，自动生成 CSV 初稿
+├── scan_patterns.py     # 扫描文件夹 + Ravelry 自动获取
+├── ravelry_scraper.py   # Ravelry 页面信息抓取模块
 ├── manager.py           # PyQt6 桌面管理器（推荐）
 ├── manager.bat          # 桌面管理器启动脚本
 ├── update.bat           # 命令行一键更新脚本
@@ -84,6 +85,41 @@ git add -A && git commit -m "更新" && git push
 ```
 
 不符合此格式的文件也能正常使用，只是需要手动填写分类信息。
+
+## Ravelry 自动获取信息 🆕
+
+添加新图纸时，只需粘贴 Ravelry 图案链接，系统会自动抓取并填充：
+
+- **标题、设计师**
+- **分类、类型、难度**
+- **针号、密度**
+- **用线、尺码范围**
+- **评分、售价**
+
+### 在桌面管理器中使用
+
+1. 点击「添加 PDF」，选择文件
+2. 在「Ravelry」输入框粘贴链接（如 `https://www.ravelry.com/patterns/library/twistveil-blouse`）
+3. 点击「获取信息」，等 2-3 秒
+4. 表单自动填充，检查确认后保存
+
+### 在命令行中使用
+
+```bash
+python scan_patterns.py
+```
+
+扫描到新 PDF 后，会提示输入 Ravelry 链接，粘贴后自动获取信息并预览，确认后写入 CSV。
+
+### 手动抓取
+
+也可以单独使用抓取模块查看某图案的信息：
+
+```bash
+python ravelry_scraper.py
+```
+
+> **注意**：抓取依赖网络连接，需要能访问 ravelry.com。如果抓取失败，仍可正常手动填写信息。
 
 ## 备份建议
 

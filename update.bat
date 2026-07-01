@@ -9,7 +9,7 @@ echo.
 
 REM ─── 第一步：重新生成网页 ───
 echo [1/3] 正在重新生成网页...
-python generate_site.py
+"%~dp0.venv\Scripts\python.exe" generate_site.py
 if %errorlevel% neq 0 (
     echo *** 生成网页失败，请检查 patterns.csv 格式 ***
     pause

@@ -18,14 +18,21 @@ CSV_PATH = SCRIPT_DIR / "patterns.csv"
 PDF_DIR = SCRIPT_DIR / "patterns"
 GENERATE_SCRIPT = SCRIPT_DIR / "generate_site.py"
 
+# 尝试导入 Ravelry 抓取模块
+try:
+    from ravelry_scraper import fetch_ravelry_pattern, map_to_csv_fields
+    HAS_RAVELRY = True
+except ImportError:
+    HAS_RAVELRY = False
+
 # ─── 分类体系 ───
 CATEGORIES = ["棒针", "钩针"]
 TYPES = ["毛衫", "开衫", "背心", "围巾", "帽子", "袜子", "手套", "披肩", "毯子", "玩偶", "其他"]
 LANGUAGES = ["中", "日", "英"]
 DIFFICULTIES = ["初级", "中级", "高级"]
 
-FIELDNAMES = ["filename", "title", "category", "type", "language", "difficulty", "notes"]
-HEADERS = ["文件名", "标题", "分类", "类型", "语言", "难度", "备注"]
+FIELDNAMES = ["filename", "title", "category", "type", "language", "difficulty", "notes", "image", "url"]
+HEADERS = ["文件名", "标题", "分类", "类型", "语言", "难度", "备注", "图片", "网址"]
 
 # ─── 配色（与网页一致）───
 COLOR_BG = "#faf6f0"
@@ -115,6 +122,7 @@ class PatternDialog(QDialog):
         is_edit = pattern is not None
         self.setWindowTitle("编辑图纸" if is_edit else "添加图纸")
         self.setMinimumWidth(460)
+        self.downloaded_image = pattern.get("image", "") if is_edit and pattern else ""
         self._apply_style()
 
         layout = QVBoxLayout(self)
@@ -184,6 +192,39 @@ class PatternDialog(QDialog):
         self.notes_input.setFixedHeight(60)
         form.addRow("备注:", self.notes_input)
 
+        # Ravelry 链接（自动获取信息）
+        ravelry_row = QHBoxLayout()
+        self.ravelry_url_input = QLineEdit()
+        self.ravelry_url_input.setPlaceholderText("粘贴 Ravelry 图案链接，自动获取信息…")
+        self.ravelry_url_input.setStyleSheet("""
+            QLineEdit {
+                padding: 6px 10px;
+                border: 2px solid #e5ddd3;
+                border-radius: 8px;
+                background: #ffffff;
+                color: #3a3027;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border-color: #b85c5c;
+            }
+        """)
+        ravelry_row.addWidget(self.ravelry_url_input)
+
+        self.btn_fetch_ravelry = QPushButton("获取信息")
+        self.btn_fetch_ravelry.setFixedWidth(90)
+        self.btn_fetch_ravelry.setStyleSheet(self._btn_style(primary=True))
+        self.btn_fetch_ravelry.clicked.connect(self._fetch_ravelry)
+        ravelry_row.addWidget(self.btn_fetch_ravelry)
+
+        self.ravelry_status = QLabel("")
+        self.ravelry_status.setStyleSheet("font-size: 12px; color: #8a7a6a;")
+        ravelry_row.addWidget(self.ravelry_status)
+
+        ravelry_widget = QWidget()
+        ravelry_widget.setLayout(ravelry_row)
+        form.addRow("Ravelry:", ravelry_widget)
+
         layout.addLayout(form)
 
         # 按钮
@@ -223,6 +264,101 @@ class PatternDialog(QDialog):
                 # 用文件名（去扩展名）作为标题
                 self.title_input.setText(src.stem.replace("_", " ").replace("-", " "))
 
+    def _fetch_ravelry(self):
+        """点击获取信息按钮，异步抓取 Ravelry 数据"""
+        url = self.ravelry_url_input.text().strip()
+        if not url:
+            self.ravelry_status.setText("请先粘贴 Ravelry 链接")
+            return
+        if "ravelry.com" not in url:
+            self.ravelry_status.setText("⚠️ 不是有效的 Ravelry 链接")
+            return
+
+        self.btn_fetch_ravelry.setEnabled(False)
+        self.ravelry_status.setText("正在获取…")
+        self.ravelry_status.setStyleSheet("font-size: 12px; color: #b85c5c;")
+
+        self.fetch_thread = RavelryFetchThread(url)
+        self.fetch_thread.finished_signal.connect(self._apply_ravelry_data)
+        self.fetch_thread.start()
+
+    def _apply_ravelry_data(self, scraped):
+        """Ravelry 数据获取完成，自动填充表单 + 下载图片"""
+        self.btn_fetch_ravelry.setEnabled(True)
+
+        if not scraped or (scraped.get("_error") and not scraped.get("title")):
+            error = scraped.get("_error", "未知错误") if scraped else "无返回数据"
+            self.ravelry_status.setText(f"❌ 获取失败: {error}")
+            self.ravelry_status.setStyleSheet("font-size: 12px; color: #c0392b;")
+            return
+
+        # 下载示例图片
+        self.downloaded_image = ""
+        image_url = scraped.get("image_url", "")
+        if image_url:
+            from ravelry_scraper import download_image as dl_image
+            image_name = scraped.get("title", "pattern").replace(" ", "_")
+            img_dir = SCRIPT_DIR / "images"
+            self.downloaded_image = dl_image(image_url, img_dir, image_name)
+            if self.downloaded_image:
+                self.ravelry_status.setText("✅ 图片已下载")
+                self.ravelry_status.setStyleSheet("font-size: 12px; color: #27ae60;")
+
+        csv_fields = map_to_csv_fields(scraped)
+        if not csv_fields:
+            self.ravelry_status.setText("❌ 无法解析数据")
+            self.ravelry_status.setStyleSheet("font-size: 12px; color: #c0392b;")
+            return
+
+        # 自动填充（不覆盖用户已填的内容）
+        if scraped.get("title") and not self.title_input.text().strip():
+            self.title_input.setText(scraped["title"])
+
+        cat = csv_fields.get("category", "")
+        if cat and self.category_combo.currentData() == "":
+            for i in range(self.category_combo.count()):
+                if self.category_combo.itemData(i) == cat:
+                    self.category_combo.setCurrentIndex(i)
+                    break
+
+        ptype = csv_fields.get("type", "")
+        if ptype and self.type_combo.currentData() == "":
+            for i in range(self.type_combo.count()):
+                if self.type_combo.itemData(i) == ptype:
+                    self.type_combo.setCurrentIndex(i)
+                    break
+
+        lang = csv_fields.get("language", "")
+        if lang and self.language_combo.currentData() == "":
+            found = False
+            for i in range(self.language_combo.count()):
+                if self.language_combo.itemData(i) == lang:
+                    self.language_combo.setCurrentIndex(i)
+                    found = True
+                    break
+            if not found and lang:
+                self.language_combo.addItem(lang, lang)
+                self.language_combo.setCurrentIndex(self.language_combo.count() - 1)
+
+        diff = csv_fields.get("difficulty", "")
+        if diff and self.difficulty_combo.currentData() == "":
+            found = False
+            for i in range(self.difficulty_combo.count()):
+                if self.difficulty_combo.itemData(i) == diff:
+                    self.difficulty_combo.setCurrentIndex(i)
+                    found = True
+                    break
+            if not found and diff:
+                self.difficulty_combo.addItem(diff, diff)
+                self.difficulty_combo.setCurrentIndex(self.difficulty_combo.count() - 1)
+
+        notes = csv_fields.get("notes", "")
+        if notes and not self.notes_input.toPlainText().strip():
+            self.notes_input.setPlainText(notes)
+
+        self.ravelry_status.setText("✅ 信息已填充" + (" + 图片已下载" if self.downloaded_image else ""))
+        self.ravelry_status.setStyleSheet("font-size: 12px; color: #27ae60;")
+
     def _on_save(self):
         """保存按钮回调"""
         filename = self.file_label.text().strip()
@@ -252,6 +388,8 @@ class PatternDialog(QDialog):
             "language": self.language_combo.currentData(),
             "difficulty": self.difficulty_combo.currentData(),
             "notes": self.notes_input.toPlainText().strip(),
+            "image": self.downloaded_image if hasattr(self, "downloaded_image") else "",
+            "url": self.ravelry_url_input.text().strip() if hasattr(self, "ravelry_url_input") else "",
         }
         self.accept()
 
@@ -349,6 +487,29 @@ class CommandThread(QThread):
             self.finished_signal.emit(False, "命令未找到，请检查是否已安装")
         except Exception as e:
             self.finished_signal.emit(False, str(e))
+
+
+# ═══════════════════════════════════════════
+#  Ravelry 异步抓取线程
+# ═══════════════════════════════════════════
+
+class RavelryFetchThread(QThread):
+    """后台抓取 Ravelry 数据，避免界面卡死"""
+    finished_signal = pyqtSignal(object)  # emits dict or None
+
+    def __init__(self, url):
+        super().__init__()
+        self.url = url
+
+    def run(self):
+        if not HAS_RAVELRY:
+            self.finished_signal.emit({"_error": "缺少 ravelry_scraper 模块"})
+            return
+        try:
+            data = fetch_ravelry_pattern(self.url)
+            self.finished_signal.emit(data)
+        except Exception as e:
+            self.finished_signal.emit({"_error": str(e)})
 
 
 # ═══════════════════════════════════════════

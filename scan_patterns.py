@@ -3,6 +3,7 @@
 编织图纸扫描脚本
 扫描 patterns/ 文件夹，自动发现未登记的 PDF，
 解析文件名提取分类/类型/语言，读取 PDF 元数据提取标题，
+支持从 Ravelry 链接自动获取元数据填充备注，
 生成或更新 patterns.csv。
 """
 
@@ -19,6 +20,13 @@ if sys.stdout.encoding != "utf-8":
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CSV_PATH = SCRIPT_DIR / "patterns.csv"
 PDF_DIR = SCRIPT_DIR / "patterns"
+
+# 尝试导入 Ravelry 抓取模块
+try:
+    from ravelry_scraper import fetch_ravelry_pattern, map_to_csv_fields
+    HAS_RAVELRY = True
+except ImportError:
+    HAS_RAVELRY = False
 
 # ─── 分类体系 ───
 CATEGORIES = {"棒针", "钩针"}
@@ -135,6 +143,61 @@ def load_existing_csv():
     return existing
 
 
+def fetch_ravelry_info():
+    """交互式获取 Ravelry 元数据，返回 CSV 字段建议"""
+    url = input("  请输入 Ravelry 链接（直接回车跳过）: ").strip()
+    if not url:
+        return None
+
+    if not HAS_RAVELRY:
+        print("   ⚠️  缺少 ravelry_scraper 模块，跳过 Ravelry 抓取")
+        return None
+
+    print("   🔍 正在从 Ravelry 获取信息...")
+    try:
+        scraped = fetch_ravelry_pattern(url)
+    except Exception as e:
+        print(f"   ❌ Ravelry 抓取失败: {e}")
+        return None
+
+    if scraped.get("_error") and not scraped.get("title"):
+        print(f"   ❌ Ravelry 抓取失败: {scraped['_error']}")
+        return None
+
+    csv_fields = map_to_csv_fields(scraped)
+    csv_fields["url"] = url
+
+    # 展示预览
+    print()
+    print(f"   📋 从 Ravelry 获取到以下信息：")
+    print(f"      标题:    {scraped.get('title', '')}")
+    print(f"      设计师:  {scraped.get('designer', '')}")
+    print(f"      分类:    {csv_fields.get('category', '')}")
+    print(f"      类型:    {csv_fields.get('type', '')}")
+    print(f"      语言:    {csv_fields.get('language', '')}")
+    print(f"      难度:    {csv_fields.get('difficulty', '')}")
+    notes = csv_fields.get('notes', '')
+    if len(notes) > 80:
+        notes = notes[:80] + "…"
+    print(f"      备注:    {notes}")
+    print()
+
+    while True:
+        choice = input("  是否采用？(y=采用 / n=跳过 / e=编辑备注后采用): ").strip().lower()
+        if choice in ("y", "yes", "是"):
+            return csv_fields
+        elif choice in ("n", "no", "否", ""):
+            return None
+        elif choice in ("e", "edit", "编辑"):
+            print(f"   当前备注: {csv_fields['notes']}")
+            new_notes = input("   请输入新备注（直接回车保留原备注）: ").strip()
+            if new_notes:
+                csv_fields["notes"] = new_notes
+            return csv_fields
+        else:
+            print("   无效输入，请输入 y / n / e")
+
+
 def scan_pdfs():
     """扫描 PDF 文件夹，返回未登记的 PDF 列表"""
     existing = load_existing_csv()
@@ -159,7 +222,10 @@ def scan_pdfs():
         if pdf_title:
             parsed["title"] = pdf_title
 
-        new_pdfs.append({
+        # 尝试从 Ravelry 获取元数据
+        ravelry_fields = fetch_ravelry_info()
+
+        new_entry = {
             "filename": filename,
             "title": parsed["title"],
             "category": parsed["category"],
@@ -167,14 +233,38 @@ def scan_pdfs():
             "language": parsed["language"],
             "difficulty": "",
             "notes": "",
-        })
+            "image": "",
+            "url": "",
+        }
+
+        # 如果从 Ravelry 获取到了信息，合并到条目中
+        if ravelry_fields:
+            if ravelry_fields.get("url"):
+                new_entry["url"] = ravelry_fields["url"]
+            if ravelry_fields.get("title"):
+                new_entry["title"] = ravelry_fields["title"]
+            if ravelry_fields.get("category"):
+                new_entry["category"] = ravelry_fields["category"]
+            if ravelry_fields.get("type"):
+                new_entry["type"] = ravelry_fields["type"]
+            if ravelry_fields.get("language"):
+                new_entry["language"] = ravelry_fields["language"]
+            if ravelry_fields.get("difficulty"):
+                new_entry["difficulty"] = ravelry_fields["difficulty"]
+            if ravelry_fields.get("notes"):
+                new_entry["notes"] = ravelry_fields["notes"]
+            if ravelry_fields.get("image"):
+                new_entry["image"] = ravelry_fields["image"]
+
+        new_pdfs.append(new_entry)
+        print()
 
     return new_pdfs
 
 
 def append_to_csv(new_patterns):
     """将新图纸追加到 CSV"""
-    fieldnames = ["filename", "title", "category", "type", "language", "difficulty", "notes"]
+    fieldnames = ["filename", "title", "category", "type", "language", "difficulty", "notes", "image", "url"]
 
     # 如果 CSV 不存在，创建并写入表头
     if not CSV_PATH.exists():

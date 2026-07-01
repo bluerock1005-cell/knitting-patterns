@@ -55,6 +55,8 @@ def load_patterns(csv_path):
                     "language": row.get("language", "").strip(),
                     "difficulty": row.get("difficulty", "").strip(),
                     "notes": row.get("notes", "").strip(),
+                    "image": row.get("image", "").strip(),
+                    "url": row.get("url", "").strip(),
                 }
             )
     return patterns
@@ -69,8 +71,6 @@ def build_html(patterns):
     # 收集筛选项
     categories = sorted(set(p["category"] for p in patterns if p["category"]))
     types = sorted(set(p["type"] for p in patterns if p["type"]))
-    languages = sorted(set(p["language"] for p in patterns if p["language"]))
-    difficulties = sorted(set(p["difficulty"] for p in patterns if p["difficulty"]))
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -205,12 +205,21 @@ def build_html(patterns):
             box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         }}
         .card-thumb {{
-            background: linear-gradient(135deg, var(--primary-light), #f3d9d9);
-            height: 90px;
+            height: 200px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary-light), #f3d9d9);
+            overflow: hidden;
+        }}
+        .card-thumb img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }}
+        .card-thumb .placeholder {{
+            font-size: 3rem;
         }}
         .card-body {{
             padding: 1rem 1.2rem 1.2rem;
@@ -250,6 +259,23 @@ def build_html(patterns):
             margin-bottom: 0.8rem;
             flex: 1;
         }}
+        .card-info {{
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 0.8rem;
+            flex: 1;
+            font-size: 0.78rem;
+            color: var(--text-light);
+        }}
+        .info-item {{
+            display: block;
+            padding: 0.15rem 0;
+            border-bottom: 1px dotted var(--border);
+        }}
+        .info-item:last-child {{
+            border-bottom: none;
+        }}
         .download-btn {{
             display: inline-flex;
             align-items: center;
@@ -267,6 +293,29 @@ def build_html(patterns):
         }}
         .download-btn:hover {{
             background: var(--primary-dark);
+        }}
+        .card-actions {{
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }}
+        .ravelry-link {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.5rem 0.8rem;
+            color: var(--primary);
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            border: 1.5px solid var(--primary-light);
+            transition: background 0.2s;
+        }}
+        .ravelry-link:hover {{
+            background: var(--primary-light);
+            color: var(--primary-dark);
         }}
 
         /* ─── 空状态 ─── */
@@ -305,7 +354,7 @@ def build_html(patterns):
     <div class="toolbar">
         <div class="toolbar-inner">
             <div class="search-box">
-                <input type="text" id="search" placeholder="搜索标题、备注…" />
+                <input type="text" id="search" placeholder="搜索标题、作者、线材、密度、针码…" />
             </div>
             <select id="filter-category">
                 <option value="">全部分类</option>
@@ -314,14 +363,6 @@ def build_html(patterns):
             <select id="filter-type">
                 <option value="">全部类型</option>
                 {''.join(f'<option value="{t}">{t}</option>' for t in types)}
-            </select>
-            <select id="filter-language">
-                <option value="">全部语言</option>
-                {''.join(f'<option value="{l}">{l}</option>' for l in languages)}
-            </select>
-            <select id="filter-difficulty">
-                <option value="">全部难度</option>
-                {''.join(f'<option value="{d}">{d}</option>' for d in difficulties)}
             </select>
             <span class="stats" id="stats"></span>
         </div>
@@ -342,24 +383,18 @@ def build_html(patterns):
         const filters = {{
             category: document.getElementById('filter-category'),
             type: document.getElementById('filter-type'),
-            language: document.getElementById('filter-language'),
-            difficulty: document.getElementById('filter-difficulty'),
         }};
 
         function render() {{
             const q = searchInput.value.trim().toLowerCase();
             const fc = filters.category.value;
             const ft = filters.type.value;
-            const fl = filters.language.value;
-            const fd = filters.difficulty.value;
 
             const filtered = PATTERNS.filter(p => {{
                 if (q && !(p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q) || p.filename.toLowerCase().includes(q)))
                     return false;
                 if (fc && p.category !== fc) return false;
                 if (ft && p.type !== ft) return false;
-                if (fl && p.language !== fl) return false;
-                if (fd && p.difficulty !== fd) return false;
                 return true;
             }});
 
@@ -381,18 +416,52 @@ def build_html(patterns):
                 if (p.language) tags.push(`<span class="tag">${{p.language}}</span>`);
                 if (p.difficulty) tags.push(`<span class="tag diff-${{p.difficulty}}">${{p.difficulty}}</span>`);
 
-                const thumbEmoji = p.category === '钩针' ? '🧶' : '🧶';
+                const hasImage = p.image && p.image.trim() !== '';
+                const thumbContent = hasImage
+                    ? `<img src="../images/${{encodeURIComponent(p.image)}}" alt="${{escapeHtml(p.title)}}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">`
+                    : '';
+                const thumbFallback = hasImage
+                    ? `<span class="placeholder" style="display:none">🧶</span>`
+                    : `<span class="placeholder">🧶</span>`;
+
+                // 解析备注为结构化信息行
+                let notesHtml = '';
+                if (p.notes) {{
+                    const parts = p.notes.split('|').map(s => s.trim()).filter(Boolean);
+                    const infoItems = parts.map(part => {{
+                        // 给每段加图标和样式
+                        let icon = '📌';
+                        if (part.startsWith('类型')) icon = '📂';
+                        else if (part.startsWith('作者')) icon = '✍️';
+                        else if (part.startsWith('建议线材')) icon = '🧵';
+                        else if (part.startsWith('密度')) icon = '📐';
+                        else if (part.startsWith('针码')) icon = '🪡';
+                        else if (part.startsWith('用量')) icon = '📏';
+                        else if (part.startsWith('尺码')) icon = '📊';
+                        else if (part.startsWith('评分')) icon = '⭐';
+                        else if (part.startsWith('售价')) icon = '💰';
+                        return `<span class="info-item">${{icon}} ${{escapeHtml(part)}}</span>`;
+                    }});
+                    notesHtml = `<div class="card-info">${{infoItems.join('')}}</div>`;
+                }}
+
+                const ravelryLink = p.url && p.url.trim() !== ''
+                    ? `<a class="ravelry-link" href="${{escapeHtml(p.url)}}" target="_blank" rel="noopener">🔗 Ravelry 原址</a>`
+                    : '';
 
                 return `
                     <div class="card">
-                        <div class="card-thumb">${{thumbEmoji}}</div>
+                        <div class="card-thumb">${{thumbContent}}${{thumbFallback}}</div>
                         <div class="card-body">
                             <div class="card-title">${{escapeHtml(p.title)}}</div>
                             <div class="tags">${{tags.join('')}}</div>
-                            ${{p.notes ? `<div class="card-notes">${{escapeHtml(p.notes)}}</div>` : ''}}
-                            <a class="download-btn" href="../patterns/${{encodeURIComponent(p.filename)}}" download>
-                                📄 下载 PDF
-                            </a>
+                            ${{notesHtml}}
+                            <div class="card-actions">
+                                <a class="download-btn" href="../patterns/${{encodeURIComponent(p.filename)}}" download>
+                                    📄 下载 PDF
+                                </a>
+                                ${{ravelryLink}}
+                            </div>
                         </div>
                     </div>`;
             }}).join('');
@@ -405,7 +474,8 @@ def build_html(patterns):
         }}
 
         searchInput.addEventListener('input', render);
-        Object.values(filters).forEach(sel => sel.addEventListener('change', render));
+        filters.category.addEventListener('change', render);
+        filters.type.addEventListener('change', render);
 
         render();
     </script>
