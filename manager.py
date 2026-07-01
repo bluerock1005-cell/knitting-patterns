@@ -242,29 +242,22 @@ class PatternDialog(QDialog):
         cat_type_widget.setLayout(cat_type_row)
         form.addRow("属性:", cat_type_widget)
 
-        # 语言 + 难度（次要，与网站保持一致隐藏）
-        lang_diff_row = QHBoxLayout()
+        # 语言 + 难度（后台保存，界面不显示，与网站一致）
         self.language_combo = QComboBox()
-        self.language_combo.addItem("语言（可选）", "")
+        self.language_combo.addItem("", "")
         for l in LANGUAGES:
             self.language_combo.addItem(l, l)
         if is_edit and pattern["language"]:
             idx = LANGUAGES.index(pattern["language"]) + 1 if pattern["language"] in LANGUAGES else 0
             self.language_combo.setCurrentIndex(idx)
-        lang_diff_row.addWidget(self.language_combo)
 
         self.difficulty_combo = QComboBox()
-        self.difficulty_combo.addItem("难度（可选）", "")
+        self.difficulty_combo.addItem("", "")
         for d in DIFFICULTIES:
             self.difficulty_combo.addItem(d, d)
         if is_edit and pattern["difficulty"]:
             idx = DIFFICULTIES.index(pattern["difficulty"]) + 1 if pattern["difficulty"] in DIFFICULTIES else 0
             self.difficulty_combo.setCurrentIndex(idx)
-        lang_diff_row.addWidget(self.difficulty_combo)
-        lang_diff_row.addStretch()
-        lang_diff_widget = QWidget()
-        lang_diff_widget.setLayout(lang_diff_row)
-        form.addRow("", lang_diff_widget)
 
         # 备注
         self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
