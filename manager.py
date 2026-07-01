@@ -173,16 +173,23 @@ class PatternDialog(QDialog):
         """)
         ravelry_row.addWidget(self.ravelry_url_input)
 
-        self.btn_fetch_ravelry = QPushButton("🔍 自动读取")
-        self.btn_fetch_ravelry.setFixedWidth(120)
+        self.btn_fetch_ravelry = QPushButton("🔍 读取")
+        self.btn_fetch_ravelry.setFixedWidth(80)
         self.btn_fetch_ravelry.setStyleSheet(self._btn_style(primary=True))
         self.btn_fetch_ravelry.clicked.connect(self._fetch_ravelry)
         ravelry_row.addWidget(self.btn_fetch_ravelry)
 
-        self.ravelry_status = QLabel("")
-        self.ravelry_status.setStyleSheet(f"font-size: 12px; color: {COLOR_TEXT_LIGHT};")
+        self.ravelry_status = QLabel("粘贴后自动读取")
+        self.ravelry_status.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_LIGHT};")
         ravelry_row.addWidget(self.ravelry_status)
         layout.addLayout(ravelry_row)
+
+        # 网址输入框失焦时自动触发读取
+        self.ravelry_url_input.editingFinished.connect(self._auto_fetch_on_blur)
+        # 回车也触发
+        self.ravelry_url_input.returnPressed.connect(self._fetch_ravelry)
+        # 记录上次的 URL，避免重复读取
+        self._last_fetched_url = pattern.get("url", "") if is_edit and pattern else ""
 
         # 分隔线
         sep = QFrame()
@@ -297,8 +304,15 @@ class PatternDialog(QDialog):
                 # 用文件名（去扩展名）作为标题
                 self.title_input.setText(src.stem.replace("_", " ").replace("-", " "))
 
+    def _auto_fetch_on_blur(self):
+        """网址输入框失焦时，如果有新网址则自动读取"""
+        url = self.ravelry_url_input.text().strip()
+        if url and url != self._last_fetched_url and "ravelry.com" in url:
+            self._fetch_ravelry()
+
     def _fetch_ravelry(self):
-        """点击获取信息按钮，异步抓取 Ravelry 数据"""
+        """异步抓取 Ravelry 数据"""
+        self._last_fetched_url = self.ravelry_url_input.text().strip()
         url = self.ravelry_url_input.text().strip()
         if not url:
             self.ravelry_status.setText("请先粘贴 Ravelry 链接")
