@@ -33,7 +33,11 @@ LANGUAGES = ["中", "日", "英"]
 DIFFICULTIES = ["初级", "中级", "高级"]
 
 FIELDNAMES = ["filename", "title", "category", "type", "language", "difficulty", "notes", "image", "url"]
-HEADERS = ["文件名", "标题", "分类", "类型", "语言", "难度", "备注", "图片", "网址"]
+HEADERS = ["文件", "名称", "分类", "类型", "语言", "难度", "备注", "图片", "网址"]
+# 网站卡片上显示的列（与 generate_site.py 保持一致）
+VISIBLE_COLUMNS = ["filename", "title", "category", "type", "notes", "image", "url"]
+# 语言和难度在后台保留，表格中隐藏（网站也已移除这两个筛选项）
+HIDDEN_COLUMNS = ["language", "difficulty"]
 
 # ─── 配色（与网页一致）───
 COLOR_BG = "#faf6f0"
@@ -221,7 +225,7 @@ class PatternDialog(QDialog):
         if is_edit and pattern["category"]:
             idx = CATEGORIES.index(pattern["category"]) + 1 if pattern["category"] in CATEGORIES else 0
             self.category_combo.setCurrentIndex(idx)
-        self.category_combo.setMinimumWidth(100)
+        self.category_combo.setMinimumWidth(120)
         cat_type_row.addWidget(self.category_combo)
 
         self.type_combo = QComboBox()
@@ -231,33 +235,36 @@ class PatternDialog(QDialog):
         if is_edit and pattern["type"]:
             idx = TYPES.index(pattern["type"]) + 1 if pattern["type"] in TYPES else 0
             self.type_combo.setCurrentIndex(idx)
-        self.type_combo.setMinimumWidth(100)
+        self.type_combo.setMinimumWidth(120)
         cat_type_row.addWidget(self.type_combo)
+        cat_type_row.addStretch()
+        cat_type_widget = QWidget()
+        cat_type_widget.setLayout(cat_type_row)
+        form.addRow("属性:", cat_type_widget)
 
-        # 语言 + 难度 同行
+        # 语言 + 难度（次要，与网站保持一致隐藏）
+        lang_diff_row = QHBoxLayout()
         self.language_combo = QComboBox()
-        self.language_combo.addItem("（语言）", "")
+        self.language_combo.addItem("语言（可选）", "")
         for l in LANGUAGES:
             self.language_combo.addItem(l, l)
         if is_edit and pattern["language"]:
             idx = LANGUAGES.index(pattern["language"]) + 1 if pattern["language"] in LANGUAGES else 0
             self.language_combo.setCurrentIndex(idx)
-        self.language_combo.setMinimumWidth(100)
-        cat_type_row.addWidget(self.language_combo)
+        lang_diff_row.addWidget(self.language_combo)
 
         self.difficulty_combo = QComboBox()
-        self.difficulty_combo.addItem("（难度）", "")
+        self.difficulty_combo.addItem("难度（可选）", "")
         for d in DIFFICULTIES:
             self.difficulty_combo.addItem(d, d)
         if is_edit and pattern["difficulty"]:
             idx = DIFFICULTIES.index(pattern["difficulty"]) + 1 if pattern["difficulty"] in DIFFICULTIES else 0
             self.difficulty_combo.setCurrentIndex(idx)
-        self.difficulty_combo.setMinimumWidth(100)
-        cat_type_row.addWidget(self.difficulty_combo)
-
-        cat_type_widget = QWidget()
-        cat_type_widget.setLayout(cat_type_row)
-        form.addRow("属性:", cat_type_widget)
+        lang_diff_row.addWidget(self.difficulty_combo)
+        lang_diff_row.addStretch()
+        lang_diff_widget = QWidget()
+        lang_diff_widget.setLayout(lang_diff_row)
+        form.addRow("", lang_diff_widget)
 
         # 备注
         self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
@@ -657,6 +664,9 @@ class PatternManager(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(len(HEADERS))
         self.table.setHorizontalHeaderLabels(HEADERS)
+        # 隐藏语言和难度列（与网站保持一致）
+        self.table.setColumnHidden(FIELDNAMES.index("language"), True)
+        self.table.setColumnHidden(FIELDNAMES.index("difficulty"), True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
