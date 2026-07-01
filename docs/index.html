@@ -316,7 +316,7 @@
                             <div class="card-title">${escapeHtml(p.title)}</div>
                             <div class="tags">${tags.join('')}</div>
                             ${p.notes ? `<div class="card-notes">${escapeHtml(p.notes)}</div>` : ''}
-                            <a class="download-btn" href="../patterns/${encodeURIComponent(p.filename)}" download>
+                            <a class="download-btn" href="patterns/${encodeURIComponent(p.filename)}" download>
                                 📄 下载 PDF
                             </a>
                         </div>
