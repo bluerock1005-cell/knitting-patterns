@@ -17,7 +17,7 @@ if sys.stdout.encoding != "utf-8":
 # ─── 路径配置 ───
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CSV_PATH = SCRIPT_DIR / "patterns.csv"
-PDF_DIR = SCRIPT_DIR / "patterns"
+PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
 OUTPUT_DIR = SCRIPT_DIR / "docs"
 OUTPUT_FILE = OUTPUT_DIR / "index.html"
 
@@ -417,7 +417,7 @@ def build_html(patterns):
                 if (p.difficulty) tags.push(`<span class="tag diff-${{p.difficulty}}">${{p.difficulty}}</span>`);
 
                 const hasImage = p.image && p.image.trim() !== '';
-                const imgSrc = hasImage ? `../images/${{encodeURIComponent(p.image)}}` : '';
+                const imgSrc = hasImage ? `images/${{encodeURIComponent(p.image)}}` : '';
                 const thumbContent = hasImage
                     ? `<img src="${{imgSrc}}" alt="${{escapeHtml(p.title)}}" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\\'placeholder\\'>🧶</span>';">`
                     : `<span class="placeholder">🧶</span>`;
@@ -455,7 +455,7 @@ def build_html(patterns):
                             <div class="tags">${{tags.join('')}}</div>
                             ${{notesHtml}}
                             <div class="card-actions">
-                                <a class="download-btn" href="../patterns/${{encodeURIComponent(p.filename)}}" download>
+                                <a class="download-btn" href="patterns/${{encodeURIComponent(p.filename)}}" download>
                                     📄 下载 PDF
                                 </a>
                                 ${{ravelryLink}}

@@ -15,8 +15,9 @@ from pathlib import Path
 # ─── 路径常量 ───
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CSV_PATH = SCRIPT_DIR / "patterns.csv"
-PDF_DIR = SCRIPT_DIR / "patterns"
+PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
 GENERATE_SCRIPT = SCRIPT_DIR / "generate_site.py"
+IMAGES_DIR = SCRIPT_DIR / "docs" / "images"
 
 # 尝试导入 Ravelry 抓取模块
 try:
@@ -298,8 +299,7 @@ class PatternDialog(QDialog):
         if image_url:
             from ravelry_scraper import download_image as dl_image
             image_name = scraped.get("title", "pattern").replace(" ", "_")
-            img_dir = SCRIPT_DIR / "images"
-            self.downloaded_image = dl_image(image_url, img_dir, image_name)
+            self.downloaded_image = dl_image(image_url, IMAGES_DIR, image_name)
             if self.downloaded_image:
                 self.ravelry_status.setText("✅ 图片已下载")
                 self.ravelry_status.setStyleSheet("font-size: 12px; color: #27ae60;")

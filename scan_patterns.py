@@ -19,7 +19,7 @@ if sys.stdout.encoding != "utf-8":
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CSV_PATH = SCRIPT_DIR / "patterns.csv"
-PDF_DIR = SCRIPT_DIR / "patterns"
+PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
 
 # 尝试导入 Ravelry 抓取模块
 try:

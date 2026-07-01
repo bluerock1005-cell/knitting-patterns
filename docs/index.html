@@ -343,7 +343,7 @@
                 if (p.difficulty) tags.push(`<span class="tag diff-${p.difficulty}">${p.difficulty}</span>`);
 
                 const hasImage = p.image && p.image.trim() !== '';
-                const imgSrc = hasImage ? `../images/${encodeURIComponent(p.image)}` : '';
+                const imgSrc = hasImage ? `images/${encodeURIComponent(p.image)}` : '';
                 const thumbContent = hasImage
                     ? `<img src="${imgSrc}" alt="${escapeHtml(p.title)}" loading="lazy" onerror="this.parentElement.innerHTML='<span class=\'placeholder\'>🧶</span>';">`
                     : `<span class="placeholder">🧶</span>`;
@@ -381,7 +381,7 @@
                             <div class="tags">${tags.join('')}</div>
                             ${notesHtml}
                             <div class="card-actions">
-                                <a class="download-btn" href="../patterns/${encodeURIComponent(p.filename)}" download>
+                                <a class="download-btn" href="patterns/${encodeURIComponent(p.filename)}" download>
                                     📄 下载 PDF
                                 </a>
                                 ${ravelryLink}
