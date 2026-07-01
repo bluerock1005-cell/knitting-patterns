@@ -56,26 +56,28 @@ GitHub Pages 发布
 | filename | PDF 文件名 |
 | title | 图纸名称 |
 | category | 棒针 / 钩针 |
-| type | 罩衫 / 毛衫 / 开衫 / 背心 / 围巾 / ... |
-| language | 语言（后台隐藏，界面不显示） |
-| difficulty | 难度（后台隐藏，界面不显示） |
-| notes | 备注（`|` 分隔的结构化信息：类型：xxx \| 作者：xxx \| 针码：...） |
+| type | Ravelry 官方分类（Tops / Other、Sweater / Cardigan...） |
+| language | 语言（后台隐藏，GUI 和网站均不显示） |
+| difficulty | 难度（后台隐藏，GUI 和网站均不显示） |
+| notes | 备注（`|` 分隔：作者：xxx \| 结构标签 \| 针码：... \| 密度：... \| 建议线材：... \| 用量：... \| 尺码：... \| 评分：... \| 售价：...） |
 | image | 图片文件名（存在 docs/images/） |
 | url | Ravelry 原始链接 |
 
 ## GUI 对话框流程
 
 1. ① 选择 PDF 文件 → 复制到 docs/patterns/
-2. ② 粘贴 Ravelry 网址 → 自动提取名称 + 触发抓取
+2. ② 粘贴 Ravelry 网址 → 自动从 URL 提取名称 + 自动抓取元数据
 3. ③ 确认/修改：名称、属性（分类+类型）、备注
-4. 保存 → 写入 patterns.csv → 可重新生成网页
+4. 保存 → 写入 patterns.csv + 下载图片到 docs/images/
 
 ## 网站设计决策
 
-- 语言和难度筛选项已移除（网站和 GUI 一致）
+- 类型列直接使用 Ravelry 官方分类名（Tops / Other 等），不再映射为中文
+- 语言和难度筛选项已移除，GUI 对话框中也隐藏
 - 备注使用 ` | ` 分隔结构化信息，网页卡片解析为图标行
 - 图片和 PDF 都在 docs/ 内（GitHub Pages `/docs` 模式只能访问此目录）
-- 卡片显示：图片 → 名称 → 标签 → 结构化信息行 → 下载+Ravelry链接
+- 卡片显示：图片 → 名称 → 分类/类型标签 → 结构化信息行 → 下载+Ravelry链接
+- 搜索栏支持搜索标题、作者、线材、密度、针码等关键字
 
 ## 常用命令
 
