@@ -962,11 +962,24 @@ class PatternManager(QMainWindow):
         from datetime import datetime
         msg = f"更新图纸库 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         commit_thread = CommandThread(["git", "commit", "-m", msg])
-        commit_thread.finished_signal.connect(
-            lambda ok, msg: self._git_push() if ok else self._on_command_done(ok, msg)
+        self._commit_output = []
+        commit_thread.output.connect(
+            lambda text: self._commit_output.append(text)
         )
+        commit_thread.finished_signal.connect(self._on_commit_done)
         commit_thread.start()
         self.cmd_thread = commit_thread
+
+    def _on_commit_done(self, ok, msg):
+        """git commit 完成回调，处理"没有变更"的情况"""
+        output_text = "".join(self._commit_output) if hasattr(self, "_commit_output") else ""
+        if ok:
+            self._git_push()
+        elif "nothing to commit" in output_text or "没有要提交的更改" in output_text:
+            self.status_label.setText("没有新变更，直接推送…")
+            self._git_push()
+        else:
+            self._on_command_done(ok, msg)
 
     def _git_push(self):
         """git push"""
