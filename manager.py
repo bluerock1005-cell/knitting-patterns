@@ -55,7 +55,7 @@ try:
         QPushButton, QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
         QDialog, QFormLayout, QComboBox, QTextEdit, QFileDialog, QMessageBox,
         QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
-        QListWidget, QListWidgetItem, QSplitter, QScrollArea,
+        QListWidget, QListWidgetItem, QSplitter, QScrollArea, QStyledItemDelegate,
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
     from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
@@ -67,7 +67,7 @@ except ImportError:
         QPushButton, QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
         QDialog, QFormLayout, QComboBox, QTextEdit, QFileDialog, QMessageBox,
         QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
-        QListWidget, QListWidgetItem, QSplitter, QScrollArea,
+        QListWidget, QListWidgetItem, QSplitter, QScrollArea, QStyledItemDelegate,
     )
     from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
     from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
@@ -610,6 +610,55 @@ class RavelryFetchThread(QThread):
 
 
 # ═══════════════════════════════════════════
+#  单元格编辑委托（下拉框）
+# ═══════════════════════════════════════════
+
+class ComboBoxDelegate(QStyledItemDelegate):
+    """表格单元格编辑时显示下拉框"""
+
+    def __init__(self, items, editable=False, parent=None):
+        super().__init__(parent)
+        self.items = items
+        self._editable = editable
+
+    def createEditor(self, parent, option, index):
+        combo = QComboBox(parent)
+        combo.addItems(self.items)
+        if self._editable:
+            combo.setEditable(True)
+            combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        combo.setStyleSheet(f"""
+            QComboBox {{
+                padding: 4px 8px;
+                border: 2px solid {COLOR_PRIMARY};
+                border-radius: 6px;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QComboBox QAbstractItemView {{
+                background: {COLOR_CARD};
+                selection-background-color: {COLOR_PRIMARY};
+                color: {COLOR_TEXT};
+            }}
+        """)
+        return combo
+
+    def setEditorData(self, editor, index):
+        value = index.data(Qt.ItemDataRole.EditRole)
+        if value:
+            idx = editor.findText(value)
+            if idx >= 0:
+                editor.setCurrentIndex(idx)
+            elif self._editable:
+                editor.setCurrentText(value)
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText())
+
+
+# ═══════════════════════════════════════════
 #  PDF 文件列表标签页
 # ═══════════════════════════════════════════
 
@@ -914,14 +963,12 @@ class PatternManager(QMainWindow):
         self.table = QTableWidget()
         self.table.setColumnCount(len(HEADERS))
         self.table.setHorizontalHeaderLabels(HEADERS)
-        # 隐藏语言和难度列
-        self.table.setColumnHidden(FIELDNAMES.index("language"), True)
-        self.table.setColumnHidden(FIELDNAMES.index("difficulty"), True)
+        # 显示所有列（包括语言和难度）
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
         self.table.setAlternatingRowColors(True)
-        self.table.doubleClicked.connect(self._edit_pattern)
+        self.table.cellChanged.connect(self._on_cell_changed)
         self.table.setStyleSheet(f"""
             QTableWidget {{
                 background: {COLOR_CARD};
@@ -1027,11 +1074,33 @@ class PatternManager(QMainWindow):
 
     def _populate_table(self, data):
         """填充表格数据"""
+        # 设置列委托（只需设置一次，但重复设置也无害）
+        self.table.setItemDelegateForColumn(
+            FIELDNAMES.index("category"),
+            ComboBoxDelegate(CATEGORIES, editable=False, parent=self)
+        )
+        self.table.setItemDelegateForColumn(
+            FIELDNAMES.index("type"),
+            ComboBoxDelegate(TYPES, editable=True, parent=self)
+        )
+        self.table.setItemDelegateForColumn(
+            FIELDNAMES.index("language"),
+            ComboBoxDelegate(LANGUAGES, editable=True, parent=self)
+        )
+        self.table.setItemDelegateForColumn(
+            FIELDNAMES.index("difficulty"),
+            ComboBoxDelegate(DIFFICULTIES, editable=True, parent=self)
+        )
+
+        self.table.blockSignals(True)  # 防止填充时触发 cellChanged
         self.table.setRowCount(len(data))
         for i, p in enumerate(data):
             values = [p.get(k, "") for k in FIELDNAMES]
             for j, val in enumerate(values):
                 item = QTableWidgetItem(val)
+                # 文件名列不可直接编辑（关联实际文件）
+                if j == 0:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 # 分类用颜色标记
                 if j == 2 and val:
                     if val == "棒针":
@@ -1046,8 +1115,37 @@ class PatternManager(QMainWindow):
                     elif val == "高级":
                         item.setForeground(QColor("#c62828"))
                 self.table.setItem(i, j, item)
+        self.table.blockSignals(False)
 
         self.status_label.setText(f"共 {len(data)} 张图纸")
+
+    def _on_cell_changed(self, row, col):
+        """单元格编辑后自动保存到 CSV"""
+        # 根据当前搜索状态定位对应的 pattern
+        q = self.search_input.text().strip().lower()
+        if q:
+            display_list = [
+                p for p in self.patterns
+                if q in p.get("title", "").lower()
+                or q in p.get("filename", "").lower()
+                or q in p.get("notes", "").lower()
+            ]
+        else:
+            display_list = self.patterns
+
+        if row >= len(display_list):
+            return
+
+        pattern = display_list[row]
+        new_value = self.table.item(row, col).text().strip() if self.table.item(row, col) else ""
+        field = FIELDNAMES[col]
+
+        if pattern[field] == new_value:
+            return  # 值没变，不保存
+
+        pattern[field] = new_value
+        save_patterns(self.patterns)
+        self.status_label.setText(f"✅ 已更新: {pattern['title']} → {HEADERS[col]}={new_value}")
 
     def _filter_table(self):
         """搜索过滤"""
