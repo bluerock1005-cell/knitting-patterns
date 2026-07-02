@@ -68,9 +68,29 @@ def build_html(patterns):
     # 把数据嵌入页面供 JS 使用
     patterns_json = json.dumps(patterns, ensure_ascii=False)
 
-    # 收集筛选项
+    # 收集筛选项及其计数
     categories = sorted(set(p["category"] for p in patterns if p["category"]))
+    cat_counts = {c: sum(1 for p in patterns if p["category"] == c) for c in categories}
     types = sorted(set(p["type"] for p in patterns if p["type"]))
+    type_counts = {t: sum(1 for p in patterns if p["type"] == t) for t in types}
+
+    # 分类按钮 HTML
+    cat_items = ''.join(
+        f'<button class="sidebar-item cat-item" data-category="{c}">'
+        f'<span class="sidebar-label">{c}</span>'
+        f'<span class="sidebar-count">{cat_counts[c]}</span>'
+        f'</button>'
+        for c in categories
+    )
+
+    # 类型按钮 HTML
+    type_items = ''.join(
+        f'<button class="sidebar-item type-item" data-type="{t}">'
+        f'<span class="sidebar-label">{t}</span>'
+        f'<span class="sidebar-count">{type_counts[t]}</span>'
+        f'</button>'
+        for t in types
+    )
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -90,6 +110,7 @@ def build_html(patterns):
             --border: #e5ddd3;
             --shadow: 0 2px 12px rgba(0,0,0,0.06);
             --radius: 14px;
+            --sidebar-width: 180px;
         }}
 
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -107,47 +128,127 @@ def build_html(patterns):
         header {{
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: #fff;
-            padding: 2.5rem 1.5rem 2rem;
+            padding: 2rem 1.5rem 1.5rem;
             text-align: center;
         }}
         header h1 {{
-            font-size: 2rem;
+            font-size: 1.8rem;
             font-weight: 700;
-            margin-bottom: 0.3rem;
+            margin-bottom: 0.25rem;
         }}
         header p {{
             opacity: 0.85;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
         }}
 
-        /* ─── 工具栏 ─── */
-        .toolbar {{
-            max-width: 1100px;
-            margin: -1.2rem auto 0;
+        /* ─── 主布局：侧边栏 + 内容 ─── */
+        .layout {{
+            display: flex;
+            max-width: 1200px;
+            margin: 1.5rem auto 0;
             padding: 0 1.5rem;
-            position: relative;
-            z-index: 10;
+            gap: 1.2rem;
         }}
-        .toolbar-inner {{
+
+        /* ─── 侧边栏 ─── */
+        .sidebar {{
+            width: var(--sidebar-width);
+            flex-shrink: 0;
             background: var(--card-bg);
             border-radius: var(--radius);
             box-shadow: var(--shadow);
-            padding: 1.2rem 1.5rem;
+            padding: 1.2rem 0.8rem;
+            position: sticky;
+            top: 1rem;
+            align-self: flex-start;
+        }}
+        .sidebar-section {{
+            margin-bottom: 1rem;
+        }}
+        .sidebar-section:last-child {{
+            margin-bottom: 0;
+        }}
+        .sidebar-title {{
+            font-size: 0.78rem;
+            color: var(--text-light);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 0.6rem;
+            margin-bottom: 0.5rem;
+        }}
+        .sidebar-item {{
             display: flex;
-            flex-wrap: wrap;
-            gap: 0.8rem;
             align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0.55rem 0.7rem;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.88rem;
+            color: var(--text);
+            transition: background 0.15s, color 0.15s;
+            font-family: inherit;
+        }}
+        .sidebar-item:hover {{
+            background: var(--bg);
+        }}
+        .sidebar-item.active {{
+            background: var(--primary);
+            color: #fff;
+        }}
+        .sidebar-item.active:hover {{
+            background: var(--primary-dark);
+        }}
+        .sidebar-item.active .sidebar-count {{
+            background: rgba(255,255,255,0.25);
+            color: #fff;
+        }}
+        .sidebar-label {{
+            font-weight: 400;
+        }}
+        .sidebar-item.active .sidebar-label {{
+            font-weight: 500;
+        }}
+        .sidebar-count {{
+            font-size: 0.72rem;
+            background: var(--bg);
+            color: var(--text-light);
+            padding: 0.1rem 0.45rem;
+            border-radius: 6px;
+            min-width: 20px;
+            text-align: center;
+        }}
+
+        /* ─── 内容区 ─── */
+        .content {{
+            flex: 1;
+            min-width: 0;
+        }}
+
+        /* ─── 搜索栏 ─── */
+        .toolbar {{
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 0.8rem 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1rem;
         }}
         .search-box {{
-            flex: 1 1 220px;
+            flex: 1;
             position: relative;
         }}
         .search-box input {{
             width: 100%;
-            padding: 0.6rem 0.8rem 0.6rem 2.3rem;
+            padding: 0.5rem 0.8rem 0.5rem 2.2rem;
             border: 2px solid var(--border);
             border-radius: 10px;
-            font-size: 0.95rem;
+            font-size: 0.92rem;
             transition: border-color 0.2s;
             background: var(--bg);
             color: var(--text);
@@ -159,37 +260,39 @@ def build_html(patterns):
         .search-box::before {{
             content: "🔍";
             position: absolute;
-            left: 0.7rem;
+            left: 0.6rem;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 0.9rem;
-        }}
-        select {{
-            padding: 0.55rem 0.8rem;
-            border: 2px solid var(--border);
-            border-radius: 10px;
-            font-size: 0.9rem;
-            background: var(--bg);
-            color: var(--text);
-            cursor: pointer;
-            transition: border-color 0.2s;
-        }}
-        select:focus {{ outline: none; border-color: var(--primary); }}
-
-        .stats {{
             font-size: 0.85rem;
+        }}
+        .stats {{
+            font-size: 0.82rem;
             color: var(--text-light);
             white-space: nowrap;
         }}
 
+        /* ─── 手机端抽屉按钮 ─── */
+        .drawer-toggle {{
+            display: none;
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            padding: 0.5rem 0.7rem;
+            cursor: pointer;
+            font-size: 0.92rem;
+            color: var(--text);
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }}
+        .drawer-toggle:hover {{
+            border-color: var(--primary);
+        }}
+
         /* ─── 卡片网格 ─── */
         .grid {{
-            max-width: 1100px;
-            margin: 1.5rem auto 3rem;
-            padding: 0 1.5rem;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.2rem;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
         }}
         .card {{
             background: var(--card-bg);
@@ -205,7 +308,7 @@ def build_html(patterns):
             box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         }}
         .card-thumb {{
-            height: 200px;
+            height: 180px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -222,26 +325,26 @@ def build_html(patterns):
             font-size: 3rem;
         }}
         .card-body {{
-            padding: 1rem 1.2rem 1.2rem;
+            padding: 0.9rem 1.1rem 1rem;
             flex: 1;
             display: flex;
             flex-direction: column;
         }}
         .card-title {{
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
-            margin-bottom: 0.6rem;
+            margin-bottom: 0.5rem;
             color: var(--text);
         }}
         .tags {{
             display: flex;
             flex-wrap: wrap;
-            gap: 0.35rem;
-            margin-bottom: 0.7rem;
+            gap: 0.3rem;
+            margin-bottom: 0.6rem;
         }}
         .tag {{
-            font-size: 0.75rem;
-            padding: 0.15rem 0.55rem;
+            font-size: 0.72rem;
+            padding: 0.12rem 0.5rem;
             border-radius: 6px;
             background: var(--bg);
             color: var(--text-light);
@@ -249,43 +352,39 @@ def build_html(patterns):
         }}
         .tag.cat-棒针 {{ background: #fce8e8; color: #a04545; border-color: #f0c8c8; }}
         .tag.cat-钩针 {{ background: #e8f0fc; color: #4565a0; border-color: #c8d8f0; }}
-        .tag.diff-初级 {{ background: #e8f5e9; color: #2e7d32; border-color: #c8e6c9; }}
-        .tag.diff-中级 {{ background: #fff3e0; color: #e65100; border-color: #ffe0b2; }}
-        .tag.diff-高级 {{ background: #fce4ec; color: #c62828; border-color: #f8bbd0; }}
-
-        .card-notes {{
-            font-size: 0.82rem;
-            color: var(--text-light);
-            margin-bottom: 0.8rem;
-            flex: 1;
-        }}
         .card-info {{
             display: flex;
             flex-direction: column;
-            gap: 0.25rem;
-            margin-bottom: 0.8rem;
+            gap: 0.2rem;
+            margin-bottom: 0.7rem;
             flex: 1;
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             color: var(--text-light);
         }}
         .info-item {{
             display: block;
-            padding: 0.15rem 0;
+            padding: 0.12rem 0;
             border-bottom: 1px dotted var(--border);
         }}
         .info-item:last-child {{
             border-bottom: none;
         }}
+        .card-actions {{
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }}
         .download-btn {{
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            padding: 0.5rem 1rem;
+            gap: 0.35rem;
+            padding: 0.45rem 0.9rem;
             background: var(--primary);
             color: #fff;
             text-decoration: none;
             border-radius: 10px;
-            font-size: 0.88rem;
+            font-size: 0.82rem;
             font-weight: 500;
             text-align: center;
             transition: background 0.2s;
@@ -294,21 +393,15 @@ def build_html(patterns):
         .download-btn:hover {{
             background: var(--primary-dark);
         }}
-        .card-actions {{
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }}
         .ravelry-link {{
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
-            padding: 0.5rem 0.8rem;
+            gap: 0.25rem;
+            padding: 0.45rem 0.7rem;
             color: var(--primary);
             text-decoration: none;
             border-radius: 10px;
-            font-size: 0.85rem;
+            font-size: 0.82rem;
             font-weight: 500;
             border: 1.5px solid var(--primary-light);
             transition: background 0.2s;
@@ -333,15 +426,72 @@ def build_html(patterns):
         footer {{
             text-align: center;
             padding: 1.5rem;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             color: var(--text-light);
         }}
 
-        @media (max-width: 600px) {{
-            header h1 {{ font-size: 1.5rem; }}
-            .toolbar-inner {{ flex-direction: column; align-items: stretch; }}
-            .search-box {{ flex: 1 1 100%; }}
-            select {{ width: 100%; }}
+        /* ─── 手机端侧边栏抽屉 ─── */
+        .drawer-overlay {{
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 90;
+        }}
+        .drawer-overlay.open {{
+            display: block;
+        }}
+        .sidebar.mobile-drawer {{
+            display: none;
+        }}
+        .sidebar.mobile-drawer.open {{
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: var(--sidebar-width);
+            z-index: 100;
+            border-radius: 0;
+            padding: 1rem 0.8rem;
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+        }}
+
+        @media (max-width: 700px) {{
+            header h1 {{ font-size: 1.4rem; }}
+            .layout {{
+                flex-direction: column;
+                padding: 0 1rem;
+                gap: 0;
+            }}
+            .sidebar {{
+                display: none;
+            }}
+            .sidebar.mobile-drawer {{
+                display: none;
+            }}
+            .drawer-toggle {{
+                display: block;
+            }}
+            .toolbar {{
+                flex-wrap: wrap;
+            }}
+            .search-box {{
+                flex: 1 1 100%;
+                order: 2;
+            }}
+            .drawer-toggle {{
+                order: 1;
+            }}
+            .stats {{
+                order: 3;
+                width: 100%;
+                text-align: center;
+            }}
+            .grid {{
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            }}
         }}
     </style>
 </head>
@@ -351,24 +501,40 @@ def build_html(patterns):
         <p>我的毛线图纸收藏 · 点击下载 PDF</p>
     </header>
 
-    <div class="toolbar">
-        <div class="toolbar-inner">
-            <div class="search-box">
-                <input type="text" id="search" placeholder="搜索标题、作者、线材、密度、针码…" />
+    <div class="drawer-overlay" id="drawer-overlay"></div>
+
+    <div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">分类</div>
+                <button class="sidebar-item cat-item active" data-category="">
+                    <span class="sidebar-label">全部</span>
+                    <span class="sidebar-count">{len(patterns)}</span>
+                </button>
+                {cat_items}
             </div>
-            <select id="filter-category">
-                <option value="">全部分类</option>
-                {''.join(f'<option value="{c}">{c}</option>' for c in categories)}
-            </select>
-            <select id="filter-type">
-                <option value="">全部类型</option>
-                {''.join(f'<option value="{t}">{t}</option>' for t in types)}
-            </select>
-            <span class="stats" id="stats"></span>
+            <div class="sidebar-section">
+                <div class="sidebar-title">类型</div>
+                <button class="sidebar-item type-item active" data-type="">
+                    <span class="sidebar-label">全部</span>
+                    <span class="sidebar-count">{len(patterns)}</span>
+                </button>
+                {type_items}
+            </div>
+        </aside>
+
+        <div class="content">
+            <div class="toolbar">
+                <button class="drawer-toggle" id="drawer-toggle">☰ 筛选</button>
+                <div class="search-box">
+                    <input type="text" id="search" placeholder="搜索标题、作者、线材、密度、针码…" />
+                </div>
+                <span class="stats" id="stats"></span>
+            </div>
+
+            <div class="grid" id="grid"></div>
         </div>
     </div>
-
-    <div class="grid" id="grid"></div>
 
     <footer>
         由 generate_site.py 自动生成 · 数据来源 patterns.csv
@@ -380,25 +546,78 @@ def build_html(patterns):
         const grid = document.getElementById('grid');
         const stats = document.getElementById('stats');
         const searchInput = document.getElementById('search');
-        const filters = {{
-            category: document.getElementById('filter-category'),
-            type: document.getElementById('filter-type'),
-        }};
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('drawer-overlay');
+        const drawerToggle = document.getElementById('drawer-toggle');
 
+        // 筛选状态
+        let activeCategory = '';
+        let activeType = '';
+
+        // ─── 侧边栏点击 ───
+        sidebar.addEventListener('click', e => {{
+            const item = e.target.closest('.sidebar-item');
+            if (!item) return;
+
+            if (item.classList.contains('cat-item')) {{
+                activeCategory = item.dataset.category;
+                // 同组切换选中态
+                sidebar.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+            }} else if (item.classList.contains('type-item')) {{
+                activeType = item.dataset.type;
+                sidebar.querySelectorAll('.type-item').forEach(el => el.classList.remove('active'));
+                item.classList.add('active');
+            }}
+
+            render();
+            closeDrawer();
+        }});
+
+        // ─── 手机端抽屉 ───
+        drawerToggle.addEventListener('click', () => {{
+            sidebar.classList.add('mobile-drawer', 'open');
+            overlay.classList.add('open');
+        }});
+
+        overlay.addEventListener('click', closeDrawer);
+
+        function closeDrawer() {{
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        }}
+
+        // ─── 渲染 ───
         function render() {{
             const q = searchInput.value.trim().toLowerCase();
-            const fc = filters.category.value;
-            const ft = filters.type.value;
 
             const filtered = PATTERNS.filter(p => {{
                 if (q && !(p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q) || p.filename.toLowerCase().includes(q)))
                     return false;
-                if (fc && p.category !== fc) return false;
-                if (ft && p.type !== ft) return false;
+                if (activeCategory && p.category !== activeCategory) return false;
+                if (activeType && p.type !== activeType) return false;
                 return true;
             }});
 
             stats.textContent = `共 ${{filtered.length}} / ${{PATTERNS.length}} 张`;
+
+            // 更新侧边栏数量（按当前搜索词 + 另一个筛选条件计数）
+            const catGroup = activeType ? PATTERNS.filter(p => p.type === activeType) : PATTERNS;
+            const typeGroup = activeCategory ? PATTERNS.filter(p => p.category === activeCategory) : PATTERNS;
+
+            sidebar.querySelectorAll('.cat-item').forEach(el => {{
+                const cat = el.dataset.category;
+                const count = cat ? catGroup.filter(p => p.category === cat && (q ? (p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q)) : true)).length
+                    : catGroup.filter(p => q ? (p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q)) : true).length;
+                el.querySelector('.sidebar-count').textContent = count;
+            }});
+
+            sidebar.querySelectorAll('.type-item').forEach(el => {{
+                const t = el.dataset.type;
+                const count = t ? typeGroup.filter(p => p.type === t && (q ? (p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q)) : true)).length
+                    : typeGroup.filter(p => q ? (p.title.toLowerCase().includes(q) || p.notes.toLowerCase().includes(q)) : true).length;
+                el.querySelector('.sidebar-count').textContent = count;
+            }});
 
             if (filtered.length === 0) {{
                 grid.innerHTML = `
@@ -413,8 +632,6 @@ def build_html(patterns):
                 const tags = [];
                 if (p.category) tags.push(`<span class="tag cat-${{p.category}}">${{p.category}}</span>`);
                 if (p.type) tags.push(`<span class="tag">${{p.type}}</span>`);
-                if (p.language) tags.push(`<span class="tag">${{p.language}}</span>`);
-                if (p.difficulty) tags.push(`<span class="tag diff-${{p.difficulty}}">${{p.difficulty}}</span>`);
 
                 const hasImage = p.image && p.image.trim() !== '';
                 const imgSrc = hasImage ? `images/${{encodeURIComponent(p.image)}}` : '';
@@ -427,7 +644,6 @@ def build_html(patterns):
                 if (p.notes) {{
                     const parts = p.notes.split('|').map(s => s.trim()).filter(Boolean);
                     const infoItems = parts.map(part => {{
-                        // 给每段加图标和样式
                         let icon = '📌';
                         if (part.startsWith('作者')) icon = '✍️';
                         else if (part.startsWith('建议线材')) icon = '🧵';
@@ -443,7 +659,7 @@ def build_html(patterns):
                 }}
 
                 const ravelryLink = p.url && p.url.trim() !== ''
-                    ? `<a class="ravelry-link" href="${{escapeHtml(p.url)}}" target="_blank" rel="noopener">🔗 Ravelry 原址</a>`
+                    ? `<a class="ravelry-link" href="${{escapeHtml(p.url)}}" target="_blank" rel="noopener">🔗 Ravelry</a>`
                     : '';
 
                 return `
@@ -471,8 +687,6 @@ def build_html(patterns):
         }}
 
         searchInput.addEventListener('input', render);
-        filters.category.addEventListener('change', render);
-        filters.type.addEventListener('change', render);
 
         render();
     </script>
