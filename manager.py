@@ -1236,7 +1236,7 @@ class PatternManager(QMainWindow):
                 if src.resolve() != dst.resolve():
                     shutil.copy2(str(src), str(dst))
 
-            self.patterns.append(data)
+            self.patterns.insert(0, data)
             save_patterns(self.patterns)
             self._reload_table()
             self.status_label.setText(f"✅ 已添加: {data['title']}")
@@ -1355,7 +1355,7 @@ class PatternManager(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self.patterns.extend(new_pdfs)
+            self.patterns = new_pdfs + self.patterns
             save_patterns(self.patterns)
             self._reload_table()
             self.status_label.setText(f"✅ 已添加 {len(new_pdfs)} 张图纸，请补充分类和类型等信息")
@@ -1489,7 +1489,7 @@ class PatternManager(QMainWindow):
                     PDF_DIR.mkdir(exist_ok=True)
                     if src.resolve() != dst.resolve():
                         shutil.copy2(str(src), str(dst))
-                self.patterns.append(data)
+                self.patterns.insert(0, data)
                 added += 1
 
         save_patterns(self.patterns)
