@@ -627,9 +627,16 @@ class ComboBoxDelegate(QStyledItemDelegate):
         if self._editable:
             combo.setEditable(True)
             combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        # 让下拉列表宽度自适应内容，不受列宽限制
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        combo.setMinimumWidth(max(combo.minimumWidth(), 120))
+        combo.view().setMinimumWidth(
+            max(combo.view().fontMetrics().boundingRect(max(self.items, key=len)).width() + 40, 120)
+        )
         combo.setStyleSheet(f"""
             QComboBox {{
-                padding: 4px 8px;
+                min-width: 120px;
+                padding: 6px 10px;
                 border: 2px solid {COLOR_PRIMARY};
                 border-radius: 6px;
                 background: {COLOR_CARD};
@@ -638,9 +645,16 @@ class ComboBoxDelegate(QStyledItemDelegate):
                 font-family: {FONT_FAMILY};
             }}
             QComboBox QAbstractItemView {{
+                min-width: 120px;
                 background: {COLOR_CARD};
                 selection-background-color: {COLOR_PRIMARY};
                 color: {COLOR_TEXT};
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+                padding: 4px;
+            }}
+            QComboBox QAbstractItemView::item {{
+                padding: 6px 12px;
             }}
         """)
         return combo
