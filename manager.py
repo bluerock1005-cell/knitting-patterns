@@ -240,12 +240,18 @@ class PatternDialog(QDialog):
         cat_type_row.addWidget(self.category_combo)
 
         self.type_combo = QComboBox()
+        self.type_combo.setEditable(True)
+        self.type_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.type_combo.addItem("（类型）", "")
         for t in TYPES:
             self.type_combo.addItem(t, t)
         if is_edit and pattern["type"]:
-            idx = TYPES.index(pattern["type"]) + 1 if pattern["type"] in TYPES else 0
-            self.type_combo.setCurrentIndex(idx)
+            if pattern["type"] in TYPES:
+                idx = TYPES.index(pattern["type"]) + 1
+                self.type_combo.setCurrentIndex(idx)
+            else:
+                self.type_combo.setCurrentIndex(0)
+                self.type_combo.setCurrentText(pattern["type"])
         self.type_combo.setMinimumWidth(120)
         cat_type_row.addWidget(self.type_combo)
         cat_type_row.addStretch()
@@ -394,11 +400,16 @@ class PatternDialog(QDialog):
                     break
 
         ptype = csv_fields.get("type", "")
-        if ptype and self.type_combo.currentData() == "":
+        if ptype and not self.type_combo.currentText().strip():
+            found = False
             for i in range(self.type_combo.count()):
                 if self.type_combo.itemData(i) == ptype:
                     self.type_combo.setCurrentIndex(i)
+                    found = True
                     break
+            if not found:
+                self.type_combo.setCurrentIndex(0)
+                self.type_combo.setCurrentText(ptype)
 
         lang = csv_fields.get("language", "")
         if lang and self.language_combo.currentData() == "":
@@ -456,7 +467,7 @@ class PatternDialog(QDialog):
             "filename": filename,
             "title": title,
             "category": self.category_combo.currentData(),
-            "type": self.type_combo.currentData(),
+            "type": self.type_combo.currentText().strip(),
             "language": self.language_combo.currentData(),
             "difficulty": self.difficulty_combo.currentData(),
             "notes": self.notes_input.toPlainText().strip(),
@@ -481,6 +492,15 @@ class PatternDialog(QDialog):
                 border: 2px solid {COLOR_BORDER};
                 border-radius: 8px;
                 background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QComboBox QLineEdit {{
+                padding: 6px 10px;
+                border: none;
+                border-radius: 0;
+                background: transparent;
                 color: {COLOR_TEXT};
                 font-size: 14px;
                 font-family: {FONT_FAMILY};
