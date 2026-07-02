@@ -121,7 +121,7 @@ def read_pdf_title(pdf_path):
 class PatternDialog(QDialog):
     """添加 / 编辑图纸的对话框"""
 
-    def __init__(self, parent=None, pattern=None, existing_files=None):
+    def __init__(self, parent=None, pattern=None, existing_files=None, pdf_path=None):
         super().__init__(parent)
         self.existing_files = existing_files or set()
         self.result_data = None
@@ -154,6 +154,14 @@ class PatternDialog(QDialog):
         file_row.addWidget(self.file_label)
         file_row.addWidget(btn_browse)
         layout.addLayout(file_row)
+
+        # 如果传入了 pdf_path（拖拽上传），预填文件信息
+        if not is_edit and pdf_path:
+            _pdf_path = Path(pdf_path)
+            if _pdf_path.suffix.lower() == ".pdf":
+                self.selected_pdf_path = _pdf_path
+                self.file_label.setText(_pdf_path.name)
+                self.file_label.setStyleSheet(f"color: {COLOR_TEXT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
 
         # ═══════════════════════════════
         #  步骤 2：粘贴 Ravelry 网址
@@ -759,6 +767,7 @@ class PatternManager(QMainWindow):
         self._apply_style()
         self._build_ui()
         self._reload_table()
+        self.setAcceptDrops(True)
 
     # ─── UI 构建 ───
 
@@ -1256,6 +1265,161 @@ class PatternManager(QMainWindow):
         else:
             self.status_label.setText(f"❌ 失败: {msg}")
             QMessageBox.warning(self, "操作失败", f"命令执行失败:\n{msg}\n\n如果推送失败，请检查是否已配置 GitHub 远程仓库。")
+
+    # ─── 拖拽上传 ───
+
+    def dragEnterEvent(self, event):
+        """拖拽进入事件：判断是否包含 PDF 文件"""
+        mime = event.mimeData()
+        if mime.hasUrls():
+            pdf_urls = [u for u in mime.urls() if u.toLocalFile().lower().endswith(".pdf")]
+            if pdf_urls:
+                event.acceptProposedAction()
+                self._drag_highlight_on()
+                self._drag_pdf_count = len(pdf_urls)
+                self.status_label.setText(f"📄 释放以添加 {len(pdf_urls)} 个 PDF")
+            else:
+                event.ignore()
+                self.status_label.setText("⚠️ 只支持 PDF 文件")
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """拖拽离开事件：取消高亮"""
+        self._drag_highlight_off()
+        self.status_label.setText(f"共 {len(self.patterns)} 张图纸")
+
+    def dropEvent(self, event):
+        """释放拖拽事件：处理 PDF 文件"""
+        self._drag_highlight_off()
+        mime = event.mimeData()
+        pdf_paths = [Path(u.toLocalFile()) for u in mime.urls() if u.toLocalFile().lower().endswith(".pdf")]
+
+        if not pdf_paths:
+            self.status_label.setText("⚠️ 只支持 PDF 文件")
+            return
+
+        self.status_label.setText(f"📄 正在添加 {len(pdf_paths)} 个 PDF…")
+        added = 0
+        for pdf_path in pdf_paths:
+            existing_files = {p["filename"] for p in self.patterns}
+            dialog = PatternDialog(self, existing_files=existing_files, pdf_path=str(pdf_path))
+            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_data:
+                data = dialog.result_data
+                if dialog.selected_pdf_path:
+                    src = dialog.selected_pdf_path
+                    dst = PDF_DIR / data["filename"]
+                    PDF_DIR.mkdir(exist_ok=True)
+                    if src.resolve() != dst.resolve():
+                        shutil.copy2(str(src), str(dst))
+                self.patterns.append(data)
+                added += 1
+
+        save_patterns(self.patterns)
+        self._reload_table()
+        self.status_label.setText(f"✅ 已添加 {added} 张图纸（共 {len(self.patterns)} 张）")
+
+    def _drag_highlight_on(self):
+        """拖拽时高亮表格边框"""
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {COLOR_CARD};
+                border: 2px dashed {COLOR_PRIMARY};
+                border-radius: 10px;
+                gridline-color: {COLOR_BORDER};
+                font-size: 14px;
+                color: {COLOR_TEXT};
+                font-family: {FONT_FAMILY};
+                outline: none;
+            }}
+            QTableWidget::item {{
+                padding: 8px 10px;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:alternate {{
+                background: {COLOR_BG};
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:hover {{
+                background: #f5ece8;
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:selected {{
+                background: {COLOR_PRIMARY};
+                color: white;
+            }}
+            QTableWidget::item:selected:hover {{
+                background: {COLOR_PRIMARY_DARK};
+                color: white;
+            }}
+            QHeaderView::section {{
+                background: {COLOR_PRIMARY};
+                color: white;
+                padding: 10px 10px;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+        """)
+
+    def _drag_highlight_off(self):
+        """恢复表格原有样式"""
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {COLOR_CARD};
+                border: none;
+                gridline-color: {COLOR_BORDER};
+                font-size: 14px;
+                color: {COLOR_TEXT};
+                font-family: {FONT_FAMILY};
+                outline: none;
+            }}
+            QTableWidget::item {{
+                padding: 8px 10px;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:alternate {{
+                background: {COLOR_BG};
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:hover {{
+                background: #f5ece8;
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:selected {{
+                background: {COLOR_PRIMARY};
+                color: white;
+            }}
+            QTableWidget::item:selected:hover {{
+                background: {COLOR_PRIMARY_DARK};
+                color: white;
+            }}
+            QHeaderView::section {{
+                background: {COLOR_PRIMARY};
+                color: white;
+                padding: 10px 10px;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QScrollBar:vertical {{
+                background: {COLOR_BG};
+                width: 10px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {COLOR_BORDER};
+                border-radius: 5px;
+                min-height: 30px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+        """)
 
     # ─── 样式 ───
 
