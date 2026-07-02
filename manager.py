@@ -6,7 +6,9 @@
 """
 
 import csv
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -227,33 +229,17 @@ class PatternDialog(QDialog):
         self.title_input.setPlaceholderText("图纸名称…")
         form.addRow("名称:", self.title_input)
 
-        # 分类 + 类型 同行
+        # 分类 + 类型 同行（纯文本输入）
         cat_type_row = QHBoxLayout()
-        self.category_combo = QComboBox()
-        self.category_combo.addItem("（分类）", "")
-        for c in CATEGORIES:
-            self.category_combo.addItem(c, c)
-        if is_edit and pattern["category"]:
-            idx = CATEGORIES.index(pattern["category"]) + 1 if pattern["category"] in CATEGORIES else 0
-            self.category_combo.setCurrentIndex(idx)
-        self.category_combo.setMinimumWidth(120)
-        cat_type_row.addWidget(self.category_combo)
+        self.category_input = QLineEdit(pattern["category"] if is_edit else "")
+        self.category_input.setPlaceholderText("分类")
+        self.category_input.setMinimumWidth(120)
+        cat_type_row.addWidget(self.category_input)
 
-        self.type_combo = QComboBox()
-        self.type_combo.setEditable(True)
-        self.type_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.type_combo.addItem("（类型）", "")
-        for t in TYPES:
-            self.type_combo.addItem(t, t)
-        if is_edit and pattern["type"]:
-            if pattern["type"] in TYPES:
-                idx = TYPES.index(pattern["type"]) + 1
-                self.type_combo.setCurrentIndex(idx)
-            else:
-                self.type_combo.setCurrentIndex(0)
-                self.type_combo.setCurrentText(pattern["type"])
-        self.type_combo.setMinimumWidth(120)
-        cat_type_row.addWidget(self.type_combo)
+        self.type_input = QLineEdit(pattern["type"] if is_edit else "")
+        self.type_input.setPlaceholderText("类型")
+        self.type_input.setMinimumWidth(120)
+        cat_type_row.addWidget(self.type_input)
         cat_type_row.addStretch()
         cat_type_widget = QWidget()
         cat_type_widget.setLayout(cat_type_row)
@@ -393,23 +379,12 @@ class PatternDialog(QDialog):
             self.title_input.setText(scraped["title"])
 
         cat = csv_fields.get("category", "")
-        if cat and self.category_combo.currentData() == "":
-            for i in range(self.category_combo.count()):
-                if self.category_combo.itemData(i) == cat:
-                    self.category_combo.setCurrentIndex(i)
-                    break
+        if cat and not self.category_input.text().strip():
+            self.category_input.setText(cat)
 
         ptype = csv_fields.get("type", "")
-        if ptype and not self.type_combo.currentText().strip():
-            found = False
-            for i in range(self.type_combo.count()):
-                if self.type_combo.itemData(i) == ptype:
-                    self.type_combo.setCurrentIndex(i)
-                    found = True
-                    break
-            if not found:
-                self.type_combo.setCurrentIndex(0)
-                self.type_combo.setCurrentText(ptype)
+        if ptype and not self.type_input.text().strip():
+            self.type_input.setText(ptype)
 
         lang = csv_fields.get("language", "")
         if lang and self.language_combo.currentData() == "":
@@ -466,8 +441,8 @@ class PatternDialog(QDialog):
         self.result_data = {
             "filename": filename,
             "title": title,
-            "category": self.category_combo.currentData(),
-            "type": self.type_combo.currentText().strip(),
+            "category": self.category_input.text().strip(),
+            "type": self.type_input.text().strip(),
             "language": self.language_combo.currentData(),
             "difficulty": self.difficulty_combo.currentData(),
             "notes": self.notes_input.toPlainText().strip(),
@@ -670,6 +645,39 @@ class ComboBoxDelegate(QStyledItemDelegate):
 
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText())
+
+
+class LargeLineEditDelegate(QStyledItemDelegate):
+    """表格单元格编辑时使用更大的文本编辑框"""
+
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setMinimumWidth(260)
+        editor.setMinimumHeight(32)
+        editor.setStyleSheet(f"""
+            QLineEdit {{
+                padding: 8px 10px;
+                border: 2px solid {COLOR_PRIMARY};
+                border-radius: 8px;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+        """)
+        return editor
+
+    def setEditorData(self, editor, index):
+        if isinstance(editor, QLineEdit):
+            editor.setText(index.data(Qt.ItemDataRole.EditRole) or "")
+
+    def setModelData(self, editor, model, index):
+        if isinstance(editor, QLineEdit):
+            model.setData(index, editor.text())
+
+    def updateEditorGeometry(self, editor, option, index):
+        rect = option.rect.adjusted(-40, 0, 40, 0)
+        editor.setGeometry(rect)
 
 
 # ═══════════════════════════════════════════
@@ -1037,19 +1045,35 @@ class PatternManager(QMainWindow):
                 height: 0;
             }}
         """)
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.verticalHeader().setMinimumSectionSize(34)
 
-        # 列宽自适应
+        # 列宽：全部设为 Interactive（用户可拖拽调节），设置合理的初始宽度
         header_view = self.table.horizontalHeader()
-        header_view.setStretchLastSection(False)
-        header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # 文件名
-        header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # 标题（占满剩余）
-        header_view.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # 分类
-        header_view.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # 类型
-        header_view.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # 语言（隐藏）
-        header_view.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # 难度（隐藏）
-        header_view.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)           # 备注（占满剩余）
-        header_view.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # 图片
-        header_view.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # 网址
+        header_view.setStretchLastSection(True)  # 最后一列自动占满剩余空间
+        column_widths = {
+            0: 200,   # 文件名
+            1: 220,   # 标题
+            2: 60,    # 分类
+            3: 80,    # 类型
+            4: 60,    # 语言
+            5: 60,    # 难度
+            6: 300,   # 备注
+            7: 120,   # 图片
+            8: 200,   # 网址
+        }
+        for col in range(len(HEADERS)):
+            header_view.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
+            if col in column_widths:
+                header_view.resizeSection(col, column_widths[col])
+        # 设置最小列宽，防止列被缩到看不见
+        for col in range(len(HEADERS)):
+            self.table.setColumnWidth(col, max(self.table.columnWidth(col), 40))
+
+        # 使用更大的文本编辑框，提高双击编辑体验
+        delegate = LargeLineEditDelegate(parent=self)
+        for col in range(1, len(HEADERS)):
+            self.table.setItemDelegateForColumn(col, delegate)
 
         tab_manage_layout.addWidget(self.table)
         self.tab_widget.addTab(tab_manage, "📋  图纸管理")
@@ -1086,35 +1110,42 @@ class PatternManager(QMainWindow):
         self.patterns = load_patterns()
         self._populate_table(self.patterns)
 
+    def _get_generated_filenames(self):
+        """解析 docs/index.html，获取已生成网页中包含的图纸文件名集合"""
+        index_path = SCRIPT_DIR / "docs" / "index.html"
+        if not index_path.exists():
+            return set()
+
+        try:
+            with open(index_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            # 提取嵌入的 PATTERNS JSON 数组
+            m = re.search(r'const PATTERNS = (\[.*?\]);', content, re.DOTALL)
+            if not m:
+                return set()
+            patterns_data = json.loads(m.group(1))
+            return {p.get("filename", "") for p in patterns_data}
+        except Exception:
+            return set()
+
     def _populate_table(self, data):
         """填充表格数据"""
-        # 设置列委托（只需设置一次，但重复设置也无害）
-        self.table.setItemDelegateForColumn(
-            FIELDNAMES.index("category"),
-            ComboBoxDelegate(CATEGORIES, editable=False, parent=self)
-        )
-        self.table.setItemDelegateForColumn(
-            FIELDNAMES.index("type"),
-            ComboBoxDelegate(TYPES, editable=True, parent=self)
-        )
-        self.table.setItemDelegateForColumn(
-            FIELDNAMES.index("language"),
-            ComboBoxDelegate(LANGUAGES, editable=True, parent=self)
-        )
-        self.table.setItemDelegateForColumn(
-            FIELDNAMES.index("difficulty"),
-            ComboBoxDelegate(DIFFICULTIES, editable=True, parent=self)
-        )
+        # 获取已生成网页中的图纸文件名
+        generated_files = self._get_generated_filenames()
 
         self.table.blockSignals(True)  # 防止填充时触发 cellChanged
         self.table.setRowCount(len(data))
         for i, p in enumerate(data):
             values = [p.get(k, "") for k in FIELDNAMES]
+            is_generated = p.get("filename", "") in generated_files
             for j, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 # 文件名列不可直接编辑（关联实际文件）
                 if j == 0:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                # 已生成网页的行用浅绿色背景标记
+                if is_generated:
+                    item.setBackground(QColor("#e8f5e9"))
                 # 分类用颜色标记
                 if j == 2 and val:
                     if val == "棒针":
@@ -1131,7 +1162,14 @@ class PatternManager(QMainWindow):
                 self.table.setItem(i, j, item)
         self.table.blockSignals(False)
 
-        self.status_label.setText(f"共 {len(data)} 张图纸")
+        generated_count = len(generated_files)
+        total_count = len(data)
+        if generated_count > 0:
+            self.status_label.setText(
+                f"共 {total_count} 张图纸  |  🟢 已生成网页 {generated_count} 张  |  ⚪ 未生成 {total_count - generated_count} 张"
+            )
+        else:
+            self.status_label.setText(f"共 {total_count} 张图纸  |  尚未生成网页")
 
     def _on_cell_changed(self, row, col):
         """单元格编辑后自动保存到 CSV"""
@@ -1329,7 +1367,9 @@ class PatternManager(QMainWindow):
         self.cmd_thread.output.connect(
             lambda text: self.status_label.setText(text.strip() or self.status_label.text())
         )
-        self.cmd_thread.finished_signal.connect(self._on_command_done)
+        self.cmd_thread.finished_signal.connect(
+            lambda ok, msg: self._on_generate_done(ok, msg)
+        )
         self.btn_generate.setEnabled(False)
         self.status_label.setText("正在生成网页…")
         self.cmd_thread.start()
@@ -1339,11 +1379,16 @@ class PatternManager(QMainWindow):
         py_exe = sys.executable
         self.cmd_thread = CommandThread([py_exe, str(GENERATE_SCRIPT)])
         self.cmd_thread.finished_signal.connect(
-            lambda ok, msg: self._do_git_commands() if ok else self._on_command_done(ok, msg)
+            lambda ok, msg: self._do_git_commands() if ok else self._on_generate_done(ok, msg)
         )
         self.btn_push.setEnabled(False)
         self.status_label.setText("正在生成网页并推送到 GitHub…")
         self.cmd_thread.start()
+
+    def _on_generate_done(self, ok, msg):
+        """网页生成完成回调：刷新表格以更新生成状态标记"""
+        self._reload_table()  # 刷新表格，让已生成的行变绿
+        self._on_command_done(ok, msg)
 
     def _do_git_commands(self):
         """执行 git add, commit, push"""
