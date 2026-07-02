@@ -10,14 +10,17 @@ knitting-patterns/
 │   ├── index.html       # 自动生成的网页
 │   ├── patterns/        # PDF 图纸文件
 │   └── images/          # 图案示例图片
-├── patterns.csv         # 图纸清单（数据源）
+├── .venv/               # 项目虚拟环境（自动创建，已 gitignore）
+├── gui.py               # 双击启动管理器（自引导 venv）
+├── manager.py           # PyQt6 桌面管理器（核心）
+├── manager.bat          # Windows 备用启动脚本
 ├── generate_site.py     # 网页生成脚本
-├── scan_patterns.py     # 扫描文件夹 + Ravelry 自动获取
-├── ravelry_scraper.py   # Ravelry 页面信息抓取模块
-├── manager.py           # PyQt6 桌面管理器（推荐）
-├── manager.bat          # 桌面管理器启动脚本
-├── update.bat           # 命令行一键更新脚本
+├── scan_patterns.py     # CLI 扫描未登记 PDF + Ravelry 交互
+├── ravelry_scraper.py   # Ravelry 页面抓取 + CSV 字段映射
+├── update.bat           # 命令行一键更新（生成+提交+推送）
+├── patterns.csv         # 中央元数据清单
 ├── requirements.txt     # Python 依赖
+├── CLAUDE.md            # AI 助手指令
 └── README.md
 ```
 
@@ -25,7 +28,7 @@ knitting-patterns/
 
 ### 方式一：桌面管理器（推荐，点点鼠标就行）
 
-双击 `manager.bat` 启动图形界面，可以：
+双击 `gui.py`（或 `manager.bat`）启动图形界面，可以：
 
 - **添加 PDF** — 选择文件，粘贴 Ravelry 链接自动获取元数据，填表保存
 - **编辑/删除** — 双击表格中的行编辑，或选中后删除
@@ -52,6 +55,8 @@ python generate_site.py
 | title | 显示标题 | TwistVeil 罩衫 |
 | category | 分类：棒针 / 钩针 | 棒针 |
 | type | Ravelry 官方分类 | Tops / Other |
+| language | 语言（后台隐藏，GUI 和网站均不显示） | 日文 |
+| difficulty | 难度（后台隐藏，GUI 和网站均不显示） | 3 |
 | notes | 备注（`\|` 分隔的结构化信息） | 作者：xxx \| 针码：4.0mm \| 建议线材：xxx |
 | image | 图片文件名（存在 docs/images/） | twistveil.jpg |
 | url | Ravelry 原始链接 | https://www.ravelry.com/patterns/... |
@@ -70,14 +75,14 @@ python generate_site.py
 统一命名格式，方便扫描脚本自动解析：
 
 ```
-分类_类型_名称_语言.pdf
+分类_类型_名称.pdf
 ```
 
 示例：
 ```
-棒针_毛衫_麻花开衫_日文.pdf
-钩针_围巾_菠萝花_中.pdf
-棒针_帽子_渔夫帽_英.pdf
+棒针_毛衫_麻花开衫.pdf
+钩针_围巾_菠萝花.pdf
+棒针_帽子_渔夫帽.pdf
 ```
 
 不符合此格式的文件也能正常使用，只是需要手动填写分类信息。
