@@ -47,16 +47,18 @@ COLOR_PRIMARY_DARK = "#8b3a3a"
 COLOR_TEXT = "#3a3027"
 COLOR_TEXT_LIGHT = "#8a7a6a"
 COLOR_BORDER = "#e5ddd3"
+FONT_FAMILY = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Segoe UI", sans-serif'
 
 try:
     from PyQt6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
         QDialog, QFormLayout, QComboBox, QTextEdit, QFileDialog, QMessageBox,
-        QHeaderView, QAbstractItemView, QCheckBox, QFrame,
+        QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
+        QListWidget, QListWidgetItem, QSplitter, QScrollArea,
     )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal
-    from PyQt6.QtGui import QColor, QFont, QIcon
+    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+    from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
 except ImportError:
     print("缺少 PyQt6 依赖，正在安装...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "PyQt6"])
@@ -64,10 +66,11 @@ except ImportError:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QPushButton, QTableWidget, QTableWidgetItem, QLineEdit, QLabel,
         QDialog, QFormLayout, QComboBox, QTextEdit, QFileDialog, QMessageBox,
-        QHeaderView, QAbstractItemView, QCheckBox, QFrame,
+        QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
+        QListWidget, QListWidgetItem, QSplitter, QScrollArea,
     )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal
-    from PyQt6.QtGui import QColor, QFont, QIcon
+    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+    from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
 
 
 # ═══════════════════════════════════════════
@@ -126,7 +129,7 @@ class PatternDialog(QDialog):
 
         is_edit = pattern is not None
         self.setWindowTitle("编辑图纸" if is_edit else "添加图纸")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(540)
         self.downloaded_image = pattern.get("image", "") if is_edit and pattern else ""
         self._apply_style()
 
@@ -458,10 +461,12 @@ class PatternDialog(QDialog):
         self.setStyleSheet(f"""
             QDialog {{
                 background: {COLOR_BG};
+                font-family: {FONT_FAMILY};
             }}
             QLabel {{
                 color: {COLOR_TEXT};
                 font-size: 14px;
+                font-family: {FONT_FAMILY};
             }}
             QLineEdit, QComboBox, QTextEdit {{
                 padding: 6px 10px;
@@ -470,6 +475,7 @@ class PatternDialog(QDialog):
                 background: {COLOR_CARD};
                 color: {COLOR_TEXT};
                 font-size: 14px;
+                font-family: {FONT_FAMILY};
             }}
             QLineEdit:focus, QComboBox:focus, QTextEdit:focus {{
                 border-color: {COLOR_PRIMARY};
@@ -488,6 +494,7 @@ class PatternDialog(QDialog):
                     padding: 8px 16px;
                     font-size: 14px;
                     font-weight: bold;
+                    font-family: {FONT_FAMILY};
                 }}
                 QPushButton:hover {{
                     background: {COLOR_PRIMARY_DARK};
@@ -502,6 +509,7 @@ class PatternDialog(QDialog):
                     border-radius: 8px;
                     padding: 8px 16px;
                     font-size: 14px;
+                    font-family: {FONT_FAMILY};
                 }}
                 QPushButton:hover {{
                     border-color: {COLOR_PRIMARY};
@@ -574,6 +582,168 @@ class RavelryFetchThread(QThread):
 
 
 # ═══════════════════════════════════════════
+#  PDF 文件列表标签页
+# ═══════════════════════════════════════════
+
+class PdfFileTab(QWidget):
+    """PDF 文件独立标签页 - 显示 docs/patterns/ 内所有 PDF"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        # 顶部工具栏
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
+
+        self.btn_refresh = QPushButton("🔄 刷新列表")
+        self.btn_refresh.setStyleSheet(_btn_style_static(primary=False))
+        self.btn_refresh.clicked.connect(self.refresh)
+        top_row.addWidget(self.btn_refresh)
+
+        self.btn_open_folder = QPushButton("📂 打开文件夹")
+        self.btn_open_folder.setStyleSheet(_btn_style_static(primary=False))
+        self.btn_open_folder.clicked.connect(self._open_folder)
+        top_row.addWidget(self.btn_open_folder)
+
+        top_row.addStretch()
+
+        self.count_label = QLabel("")
+        self.count_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px;")
+        top_row.addWidget(self.count_label)
+
+        layout.addLayout(top_row)
+
+        # PDF 列表
+        self.list_widget = QListWidget()
+        self.list_widget.setAlternatingRowColors(True)
+        self.list_widget.setStyleSheet(f"""
+            QListWidget {{
+                background: {COLOR_CARD};
+                border: 2px solid {COLOR_BORDER};
+                border-radius: 10px;
+                font-size: 14px;
+                color: {COLOR_TEXT};
+                font-family: {FONT_FAMILY};
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 10px 14px;
+                border-bottom: 1px solid {COLOR_BORDER};
+            }}
+            QListWidget::item:selected {{
+                background: {COLOR_PRIMARY};
+                color: white;
+                border-radius: 6px;
+            }}
+            QListWidget::item:alternate {{
+                background: {COLOR_BG};
+            }}
+            QListWidget::item:hover {{
+                background: #f5ece8;
+                color: {COLOR_TEXT};
+            }}
+            QListWidget::item:selected:hover {{
+                background: {COLOR_PRIMARY_DARK};
+                color: white;
+            }}
+        """)
+        layout.addWidget(self.list_widget)
+
+        # 底部提示
+        hint = QLabel("💡 双击可在系统默认程序中打开 PDF")
+        hint.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 12px; padding: 4px 0;")
+        layout.addWidget(hint)
+
+        self.list_widget.itemDoubleClicked.connect(self._open_pdf)
+        self.refresh()
+
+    def refresh(self):
+        """刷新 PDF 文件列表"""
+        self.list_widget.clear()
+        if not PDF_DIR.exists():
+            self.count_label.setText("文件夹不存在")
+            return
+
+        pdfs = sorted(PDF_DIR.glob("*.pdf"), key=lambda p: p.name.lower())
+        for pdf in pdfs:
+            size_kb = pdf.stat().st_size // 1024
+            size_str = f"{size_kb} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
+            item = QListWidgetItem(f"📄  {pdf.name}   （{size_str}）")
+            item.setData(Qt.ItemDataRole.UserRole, str(pdf))
+            self.list_widget.addItem(item)
+
+        count = len(pdfs)
+        self.count_label.setText(f"共 {count} 个 PDF 文件")
+
+    def _open_folder(self):
+        """在文件资源管理器中打开 patterns/ 文件夹"""
+        PDF_DIR.mkdir(exist_ok=True)
+        if os.name == "nt":
+            os.startfile(str(PDF_DIR))
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(PDF_DIR)])
+
+    def _open_pdf(self, item):
+        """双击打开 PDF"""
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if path and Path(path).exists():
+            if os.name == "nt":
+                os.startfile(path)
+            else:
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
+
+
+# ═══════════════════════════════════════════
+#  静态按钮样式函数（供非成员方法使用）
+# ═══════════════════════════════════════════
+
+def _btn_style_static(primary=True):
+    if primary:
+        return f"""
+            QPushButton {{
+                background: {COLOR_PRIMARY};
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background: {COLOR_PRIMARY_DARK};
+            }}
+            QPushButton:disabled {{
+                background: #ccc;
+                color: #999;
+            }}
+        """
+    else:
+        return f"""
+            QPushButton {{
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
+                border: 2px solid {COLOR_BORDER};
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                border-color: {COLOR_PRIMARY};
+                color: {COLOR_PRIMARY};
+            }}
+            QPushButton:disabled {{
+                background: #eee;
+                color: #aaa;
+            }}
+        """
+
+
+# ═══════════════════════════════════════════
 #  主窗口
 # ═══════════════════════════════════════════
 
@@ -581,8 +751,8 @@ class PatternManager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🧶 编织图纸管理器")
-        self.setMinimumSize(900, 600)
-        self.resize(1000, 650)
+        self.setMinimumSize(960, 640)
+        self.resize(1100, 700)
         self.patterns = []
         self.cmd_thread = None
 
@@ -601,7 +771,7 @@ class PatternManager(QMainWindow):
 
         # 顶部标题
         header = QLabel("🧶 编织图纸管理器")
-        header.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {COLOR_PRIMARY};")
+        header.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {COLOR_PRIMARY}; font-family: {FONT_FAMILY};")
         main_layout.addWidget(header)
 
         # 工具栏
@@ -644,10 +814,52 @@ class PatternManager(QMainWindow):
 
         main_layout.addLayout(toolbar)
 
+        # ─── Tab 区域 ───
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: 2px solid {COLOR_BORDER};
+                border-radius: 10px;
+                background: {COLOR_BG};
+            }}
+            QTabWidget::tab-bar {{
+                alignment: left;
+            }}
+            QTabBar::tab {{
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT_LIGHT};
+                border: 2px solid {COLOR_BORDER};
+                border-bottom: none;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding: 8px 20px;
+                margin-right: 4px;
+                font-size: 14px;
+                font-weight: bold;
+                font-family: {FONT_FAMILY};
+                min-width: 100px;
+            }}
+            QTabBar::tab:selected {{
+                background: {COLOR_PRIMARY};
+                color: white;
+                border-color: {COLOR_PRIMARY};
+            }}
+            QTabBar::tab:hover:!selected {{
+                background: #f0e8e8;
+                color: {COLOR_PRIMARY};
+            }}
+        """)
+
+        # ── Tab 1: 图纸管理（搜索 + 表格）──
+        tab_manage = QWidget()
+        tab_manage_layout = QVBoxLayout(tab_manage)
+        tab_manage_layout.setContentsMargins(12, 12, 12, 12)
+        tab_manage_layout.setSpacing(8)
+
         # 搜索栏
         search_row = QHBoxLayout()
         search_label = QLabel("搜索:")
-        search_label.setStyleSheet(f"font-size: 14px; color: {COLOR_TEXT_LIGHT};")
+        search_label.setStyleSheet(f"font-size: 14px; color: {COLOR_TEXT_LIGHT}; font-family: {FONT_FAMILY};")
         search_row.addWidget(search_label)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("输入标题、文件名或备注关键词…")
@@ -659,6 +871,7 @@ class PatternManager(QMainWindow):
                 background: {COLOR_CARD};
                 color: {COLOR_TEXT};
                 font-size: 14px;
+                font-family: {FONT_FAMILY};
             }}
             QLineEdit:focus {{
                 border-color: {COLOR_PRIMARY};
@@ -666,13 +879,13 @@ class PatternManager(QMainWindow):
         """)
         self.search_input.textChanged.connect(self._filter_table)
         search_row.addWidget(self.search_input)
-        main_layout.addLayout(search_row)
+        tab_manage_layout.addLayout(search_row)
 
         # 表格
         self.table = QTableWidget()
         self.table.setColumnCount(len(HEADERS))
         self.table.setHorizontalHeaderLabels(HEADERS)
-        # 隐藏语言和难度列（与网站保持一致）
+        # 隐藏语言和难度列
         self.table.setColumnHidden(FIELDNAMES.index("language"), True)
         self.table.setColumnHidden(FIELDNAMES.index("difficulty"), True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -683,47 +896,98 @@ class PatternManager(QMainWindow):
         self.table.setStyleSheet(f"""
             QTableWidget {{
                 background: {COLOR_CARD};
-                border: 2px solid {COLOR_BORDER};
-                border-radius: 10px;
+                border: none;
                 gridline-color: {COLOR_BORDER};
                 font-size: 14px;
                 color: {COLOR_TEXT};
+                font-family: {FONT_FAMILY};
+                outline: none;
             }}
             QTableWidget::item {{
-                padding: 6px 10px;
+                padding: 8px 10px;
+                background: {COLOR_CARD};
+                color: {COLOR_TEXT};
             }}
             QTableWidget::item:alternate {{
                 background: {COLOR_BG};
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:hover {{
+                background: #f5ece8;
+                color: {COLOR_TEXT};
+            }}
+            QTableWidget::item:selected {{
+                background: {COLOR_PRIMARY};
+                color: white;
+            }}
+            QTableWidget::item:selected:hover {{
+                background: {COLOR_PRIMARY_DARK};
+                color: white;
             }}
             QHeaderView::section {{
                 background: {COLOR_PRIMARY};
                 color: white;
-                padding: 8px 10px;
+                padding: 10px 10px;
                 border: none;
                 font-weight: bold;
                 font-size: 14px;
+                font-family: {FONT_FAMILY};
             }}
-            QHeaderView::section:first {{
-                border-top-left-radius: 8px;
+            QScrollBar:vertical {{
+                background: {COLOR_BG};
+                width: 10px;
+                border-radius: 5px;
             }}
-            QHeaderView::section:last {{
-                border-top-right-radius: 8px;
+            QScrollBar::handle:vertical {{
+                background: {COLOR_BORDER};
+                border-radius: 5px;
+                min-height: 30px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
             }}
         """)
 
-        # 列宽
+        # 列宽自适应
         header_view = self.table.horizontalHeader()
-        header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # 文件名
-        header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # 标题
-        for i in range(2, len(HEADERS)):
-            header_view.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+        header_view.setStretchLastSection(False)
+        header_view.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # 文件名
+        header_view.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # 标题（占满剩余）
+        header_view.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # 分类
+        header_view.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # 类型
+        header_view.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # 语言（隐藏）
+        header_view.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # 难度（隐藏）
+        header_view.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)           # 备注（占满剩余）
+        header_view.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # 图片
+        header_view.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # 网址
 
-        main_layout.addWidget(self.table)
+        tab_manage_layout.addWidget(self.table)
+        self.tab_widget.addTab(tab_manage, "📋  图纸管理")
 
-        # 状态栏
+        # ── Tab 2: PDF 文件 ──
+        self.pdf_tab = PdfFileTab()
+        self.tab_widget.addTab(self.pdf_tab, "📄  PDF 文件")
+
+        # 切换 tab 时刷新 PDF 列表
+        self.tab_widget.currentChanged.connect(self._on_tab_changed)
+
+        main_layout.addWidget(self.tab_widget)
+
+        # 状态栏（放在 tab 外面，底部）
         self.status_label = QLabel("")
-        self.status_label.setStyleSheet(f"font-size: 13px; color: {COLOR_TEXT_LIGHT};")
+        self.status_label.setStyleSheet(f"""
+            font-size: 13px;
+            color: {COLOR_TEXT_LIGHT};
+            font-family: {FONT_FAMILY};
+            background: transparent;
+            padding: 4px 2px;
+        """)
         main_layout.addWidget(self.status_label)
+
+    def _on_tab_changed(self, index):
+        """切换标签页时的回调"""
+        if index == 1:  # PDF 文件 tab
+            self.pdf_tab.refresh()
 
     # ─── 数据操作 ───
 
@@ -739,8 +1003,8 @@ class PatternManager(QMainWindow):
             values = [p.get(k, "") for k in FIELDNAMES]
             for j, val in enumerate(values):
                 item = QTableWidgetItem(val)
-                # 分类和难度用颜色标记
-                if j == 2 and val:  # 分类
+                # 分类用颜色标记
+                if j == 2 and val:
                     if val == "棒针":
                         item.setForeground(QColor("#a04545"))
                     elif val == "钩针":
@@ -804,7 +1068,6 @@ class PatternManager(QMainWindow):
         if row is None:
             return
 
-        # 获取当前过滤后的数据
         q = self.search_input.text().strip().lower()
         if q:
             display_list = [
@@ -825,14 +1088,12 @@ class PatternManager(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_data:
             data = dialog.result_data
 
-            # 如果更换了文件
             if dialog.selected_pdf_path:
                 src = dialog.selected_pdf_path
                 dst = PDF_DIR / data["filename"]
                 if src.resolve() != dst.resolve():
                     shutil.copy2(str(src), str(dst))
 
-            # 更新数据
             for i, p in enumerate(self.patterns):
                 if p["filename"] == pattern["filename"]:
                     self.patterns[i] = data
@@ -848,7 +1109,6 @@ class PatternManager(QMainWindow):
         if row is None:
             return
 
-        # 获取当前显示的数据
         q = self.search_input.text().strip().lower()
         if q:
             display_list = [
@@ -890,7 +1150,6 @@ class PatternManager(QMainWindow):
 
         for pdf_path in sorted(PDF_DIR.glob("*.pdf")):
             if pdf_path.name not in existing:
-                # 尝试读取 PDF 标题
                 title = read_pdf_title(pdf_path)
                 if not title:
                     title = pdf_path.stem.replace("_", " ").replace("-", " ")
@@ -902,13 +1161,14 @@ class PatternManager(QMainWindow):
                     "language": "",
                     "difficulty": "",
                     "notes": "",
+                    "image": "",
+                    "url": "",
                 })
 
         if not new_pdfs:
             QMessageBox.information(self, "扫描结果", "没有发现未登记的 PDF，所有文件已在清单中。")
             return
 
-        # 列出新发现的文件，让用户确认
         names = "\n".join(f"  • {p['title']} ({p['filename']})" for p in new_pdfs)
         reply = QMessageBox.question(
             self, f"发现 {len(new_pdfs)} 张未登记的 PDF",
@@ -919,14 +1179,14 @@ class PatternManager(QMainWindow):
             self.patterns.extend(new_pdfs)
             save_patterns(self.patterns)
             self._reload_table()
-            self.status_label.setText(f"✅ 已添加 {len(new_pdfs)} 张图纸，请补充分类和难度等信息")
+            self.status_label.setText(f"✅ 已添加 {len(new_pdfs)} 张图纸，请补充分类和类型等信息")
 
     def _generate_site(self):
         """生成网页"""
         py_exe = sys.executable
         self.cmd_thread = CommandThread([py_exe, str(GENERATE_SCRIPT)])
         self.cmd_thread.output.connect(
-            lambda text: self.status_label.setText(self.status_label.text() + text if not self.status_label.text().startswith("$") else text)
+            lambda text: self.status_label.setText(text.strip() or self.status_label.text())
         )
         self.cmd_thread.finished_signal.connect(self._on_command_done)
         self.btn_generate.setEnabled(False)
@@ -935,7 +1195,6 @@ class PatternManager(QMainWindow):
 
     def _push_github(self):
         """推送到 GitHub"""
-        # 先生成网页
         py_exe = sys.executable
         self.cmd_thread = CommandThread([py_exe, str(GENERATE_SCRIPT)])
         self.cmd_thread.finished_signal.connect(
@@ -971,7 +1230,7 @@ class PatternManager(QMainWindow):
         self.cmd_thread = commit_thread
 
     def _on_commit_done(self, ok, msg):
-        """git commit 完成回调，处理"没有变更"的情况"""
+        """git commit 完成回调"""
         output_text = "".join(self._commit_output) if hasattr(self, "_commit_output") else ""
         if ok:
             self._git_push()
@@ -1005,52 +1264,21 @@ class PatternManager(QMainWindow):
             QMainWindow {{
                 background: {COLOR_BG};
             }}
+            QMainWindow > QWidget {{
+                background: {COLOR_BG};
+            }}
             QWidget {{
                 color: {COLOR_TEXT};
-                font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+                font-family: {FONT_FAMILY};
+            }}
+            QMessageBox {{
+                font-family: {FONT_FAMILY};
             }}
         """)
 
     @staticmethod
     def _btn_style(primary=True):
-        if primary:
-            return f"""
-                QPushButton {{
-                    background: {COLOR_PRIMARY};
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    font-size: 14px;
-                    font-weight: bold;
-                }}
-                QPushButton:hover {{
-                    background: {COLOR_PRIMARY_DARK};
-                }}
-                QPushButton:disabled {{
-                    background: #ccc;
-                    color: #999;
-                }}
-            """
-        else:
-            return f"""
-                QPushButton {{
-                    background: {COLOR_CARD};
-                    color: {COLOR_TEXT};
-                    border: 2px solid {COLOR_BORDER};
-                    border-radius: 8px;
-                    padding: 8px 16px;
-                    font-size: 14px;
-                }}
-                QPushButton:hover {{
-                    border-color: {COLOR_PRIMARY};
-                    color: {COLOR_PRIMARY};
-                }}
-                QPushButton:disabled {{
-                    background: #eee;
-                    color: #aaa;
-                }}
-            """
+        return _btn_style_static(primary)
 
 
 # ═══════════════════════════════════════════
@@ -1063,6 +1291,10 @@ def main():
 
     app = QApplication(sys.argv)
     app.setApplicationName("编织图纸管理器")
+
+    # 全局设置微软雅黑字体
+    font = QFont("Microsoft YaHei", 10)
+    app.setFont(font)
 
     window = PatternManager()
     window.show()
