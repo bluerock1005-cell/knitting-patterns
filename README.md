@@ -12,7 +12,7 @@ knitting-patterns/
 │   └── images/          # 图案示例图片
 ├── .venv/               # 项目虚拟环境（自动创建，已 gitignore）
 ├── gui.py               # 双击启动管理器（自引导 venv）
-├── manager.py           # PyQt6 桌面管理器（核心）
+├── manager.py           # PyQt6 桌面管理器（卡片式 UI，核心）
 ├── manager.bat          # Windows 备用启动脚本
 ├── generate_site.py     # 网页生成脚本
 ├── scan_patterns.py     # CLI 扫描未登记 PDF + Ravelry 交互
@@ -21,6 +21,7 @@ knitting-patterns/
 ├── patterns.csv         # 中央元数据清单
 ├── requirements.txt     # Python 依赖
 ├── CLAUDE.md            # AI 助手指令
+├── 项目更新.md    # 项目更新日志
 └── README.md
 ```
 
@@ -30,8 +31,8 @@ knitting-patterns/
 
 双击 `gui.py`（或 `manager.bat`）启动图形界面，可以：
 
-- **添加 PDF** — 选择文件，粘贴 Ravelry 链接自动获取元数据，填表保存
-- **编辑/删除** — 双击表格中的行编辑，或选中后删除
+- **添加 PDF** — 选择文件，粘贴 Ravelry 链接自动获取元数据，手动上传封面图片，填表保存
+- **编辑/删除** — 点击卡片选中，双击或点编辑按钮修改；PDF 标签页可删除文件并联动清除 CSV 记录
 - **生成网页** — 点击按钮重新生成 docs/index.html
 - **推送 GitHub** — 自动生成网页 + git commit + git push
 

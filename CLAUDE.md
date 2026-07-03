@@ -19,7 +19,7 @@
 ```
 knitting-patterns/
 ├── gui.py               # 双击启动管理器（自引导 venv）
-├── manager.py           # PyQt6 桌面管理器（核心）
+├── manager.py           # PyQt6 桌面管理器（卡片式 UI，核心）
 ├── manager.bat          # Windows 备用启动脚本
 ├── generate_site.py     # 网页生成脚本
 ├── scan_patterns.py     # CLI 扫描未登记 PDF + Ravelry 交互
@@ -32,6 +32,7 @@ knitting-patterns/
 │   ├── index.html       # 自动生成的网页
 │   ├── patterns/        # PDF 图纸文件
 │   └── images/          # 图案示例图片
+├── 项目更新.md    # 项目更新日志
 └── CLAUDE.md
 ```
 
@@ -67,8 +68,18 @@ GitHub Pages 发布
 
 1. ① 选择 PDF 文件 → 复制到 docs/patterns/
 2. ② 粘贴 Ravelry 网址 → 自动从 URL 提取名称 + 自动抓取元数据
-3. ③ 确认/修改：名称、属性（分类+类型）、备注
-4. 保存 → 写入 patterns.csv + 下载图片到 docs/images/
+3. ③ 封面图片（可选）→ 手动上传或从 Ravelry 自动下载
+4. ④ 确认/修改：名称、属性（分类+类型）、备注
+5. 保存 → 写入 patterns.csv + 图片存入 docs/images/
+
+## 桌面管理器功能
+
+- **卡片瀑布流**：图纸以封面卡片展示，悬浮浮现编辑/删除按钮，双击打开编辑对话框
+- **封面图片**：支持手动上传本地图片或从 Ravelry 自动获取
+- **PDF 删除**：PDF 文件标签页支持删除文件，已收录的图纸会自动联动清除 CSV 记录
+- **拖拽上传**：支持直接拖拽 PDF 文件到窗口批量添加
+- **搜索筛选**：支持按标题、作者、线材、密度等关键字搜索
+- **生成网页 + 推送 GitHub**：一键生成静态网页并推送到 GitHub Pages
 
 ## 网站设计决策
 
