@@ -1,4 +1,31 @@
-#!/usr/bin/env python3
+﻿"""manager.py - 编织图纸管理器（双击直接运行）"""
+import subprocess
+import sys
+from pathlib import Path
+
+# ─── 虚拟环境自引导 ───
+HERE = Path(__file__).parent.resolve()
+VENV_DIR = HERE / ".venv"
+VENV_PY = VENV_DIR / "Scripts" / "python.exe"
+VENV_PYW = VENV_DIR / "Scripts" / "pythonw.exe"
+
+if not VENV_PY.exists():
+    print("正在创建虚拟环境，首次运行需要1-2分钟…")
+    subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
+    subprocess.run(
+        [str(VENV_PY), "-m", "pip", "install",
+         "PyQt6", "pypdf", "requests", "beautifulsoup4"],
+        check=True,
+    )
+    print("初始化完成，正在启动…")
+
+if str(sys.executable).lower() not in (str(VENV_PY).lower(), str(VENV_PYW).lower()):
+    # 如果是从 pythonw.exe 启动的（无窗口），继续用 pythonw.exe 启动
+    target = str(VENV_PYW) if sys.executable.lower().endswith('pythonw.exe') else str(VENV_PY)
+    subprocess.Popen([target, __file__])
+    sys.exit(0)
+
+# ─── 主程序（下面已经是 venv 环境）───
 """
 编织图纸管理器 - PyQt6 桌面应用
 功能：表格管理图纸、搜索、添加/编辑/删除、扫描未登记 PDF、
@@ -10,11 +37,8 @@ import json
 import os
 import re
 import shutil
-import subprocess
-import sys
-from pathlib import Path
 
-# ─── 路径常量 ───
+  # ─── 路径常量 ───
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CSV_PATH = SCRIPT_DIR / "patterns.csv"
 PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
@@ -59,7 +83,7 @@ try:
         QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
         QListWidget, QListWidgetItem, QSplitter, QScrollArea, QStyledItemDelegate,
     )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
 except ImportError:
     print("缺少 PyQt6 依赖，正在安装...")
@@ -71,7 +95,7 @@ except ImportError:
         QHeaderView, QAbstractItemView, QCheckBox, QFrame, QTabWidget,
         QListWidget, QListWidgetItem, QSplitter, QScrollArea, QStyledItemDelegate,
     )
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+    from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
     from PyQt6.QtGui import QColor, QFont, QIcon, QFontDatabase
 
 
@@ -859,6 +883,7 @@ class PatternManager(QMainWindow):
         self._build_ui()
         self._reload_table()
         self.setAcceptDrops(True)
+        QTimer.singleShot(0, self._add_pattern)
 
     # ─── UI 构建 ───
 
@@ -1644,3 +1669,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
