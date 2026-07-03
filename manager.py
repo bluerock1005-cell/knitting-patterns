@@ -865,16 +865,17 @@ class PatternCard(QFrame):
         outer.addLayout(info)
 
         # ── 已生成 徽标 ──
+        self._badge = None
         if is_generated:
-            badge = QLabel("● 已上线", self)
-            badge.setStyleSheet(
+            self._badge = QLabel("● 已上线", self)
+            self._badge.setStyleSheet(
                 f"background: {COLOR_SUCCESS_BG}; color: {COLOR_SUCCESS}; "
                 f"font-size: 10px; font-weight: bold; padding: 3px 8px; "
                 f"border-radius: 8px; font-family: {FONT_FAMILY};"
             )
-            badge.adjustSize()
-            badge.move(10, 10)
-            badge.show()
+            self._badge.adjustSize()
+            self._badge.move(10, 10)
+            self._badge.show()
 
         # ── 悬浮操作按钮（编辑/删除）──
         self.btn_edit = QPushButton("✏️", self)
@@ -900,6 +901,40 @@ class PatternCard(QFrame):
         self.btn_delete.clicked.connect(lambda: self.on_delete and self.on_delete(self.pattern))
 
         self._apply_frame_style()
+
+    def set_generated(self, is_generated):
+        """Update the generated badge without destroying the card"""
+        if is_generated and self._badge is None:
+            self._badge = QLabel("\u25cf \u5df2\u4e0a\u7ebf", self)
+            self._badge.setStyleSheet(
+                f"background: {COLOR_SUCCESS_BG}; color: {COLOR_SUCCESS}; "
+                f"font-size: 10px; font-weight: bold; padding: 3px 8px; "
+                f"border-radius: 8px; font-family: {FONT_FAMILY};"
+            )
+            self._badge.adjustSize()
+            self._badge.move(10, 10)
+            self._badge.show()
+        elif not is_generated and self._badge is not None:
+            self._badge.hide()
+            self._badge.deleteLater()
+            self._badge = None
+
+    def set_generated(self, is_generated):
+        """Update the generated badge without destroying the card"""
+        if is_generated and self._badge is None:
+            self._badge = QLabel("\u25cf \u5df2\u4e0a\u7ebf", self)
+            self._badge.setStyleSheet(
+                f"background: {COLOR_SUCCESS_BG}; color: {COLOR_SUCCESS}; "
+                f"font-size: 10px; font-weight: bold; padding: 3px 8px; "
+                f"border-radius: 8px; font-family: {FONT_FAMILY};"
+            )
+            self._badge.adjustSize()
+            self._badge.move(10, 10)
+            self._badge.show()
+        elif not is_generated and self._badge is not None:
+            self._badge.hide()
+            self._badge.deleteLater()
+            self._badge = None
 
     def _make_tag(self, text, is_knit):
         lbl = QLabel(text)
@@ -1104,7 +1139,7 @@ class PdfFileTab(QWidget):
                 subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
 
     def _delete_pdf(self):
-        """删除选中的 PDF 文件"""
+        """删除选中的 PDF 文件（含联动删除图纸记录）"""
         item = self.list_widget.currentItem()
         if item is None:
             QMessageBox.information(self, "提示", "请先在列表中选择一个 PDF 文件")
@@ -1113,20 +1148,42 @@ class PdfFileTab(QWidget):
         pdf_path = Path(item.data(Qt.ItemDataRole.UserRole))
         filename = pdf_path.name
 
+        # 检查是否已录入 patterns.csv
+        all_patterns = load_patterns()
+        matched = [p for p in all_patterns if p.get("filename") == filename]
+        has_csv_entry = len(matched) > 0
+
+        # 构建确认信息
+        msg = f"确定要删除 \"{filename}\" 吗？\n\n该操作会删除 PDF 文件本身。"
+        if has_csv_entry:
+            msg += f"\n\n此图纸已在 patterns.csv 中录入，将同步删除图纸记录。"
+
         reply = QMessageBox.question(
-            self, "确认删除",
-            f"确定要删除 \"{filename}\" 吗？\n\n该操作会删除 PDF 文件本身。",
+            self, "确认删除", msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
         try:
+            # 删除 PDF 文件
             if pdf_path.exists():
                 pdf_path.unlink()
+
+            # 联动删除 patterns.csv 中的记录
+            if has_csv_entry:
+                all_patterns = [p for p in all_patterns if p.get("filename") != filename]
+                save_patterns(all_patterns)
+                # 刷新主窗口的卡片列表
+                if self.window() and hasattr(self.window(), "_reload_table"):
+                    self.window()._reload_table()
+
             self.refresh()
             if self.window() and hasattr(self.window(), "status_label"):
-                self.window().status_label.setText(f"✅ 已删除: {filename}")
+                if has_csv_entry:
+                    self.window().status_label.setText(f"✅ 已删除 PDF 及图纸记录: {filename}")
+                else:
+                    self.window().status_label.setText(f"✅ 已删除: {filename}")
         except Exception as e:
             QMessageBox.warning(self, "删除失败", f"无法删除文件:\n{e}")
 
@@ -1396,6 +1453,36 @@ class PatternManager(QMainWindow):
         self.selected_pattern = None
         self._populate_cards(self.patterns)
 
+    def _refresh_card_states(self):
+        """Update card generated badges without rebuilding (fixes flash)"""
+        generated_files = self._get_generated_filenames()
+        for card in self.pattern_cards:
+            is_gen = card.pattern.get("filename", "") in generated_files
+            card.set_generated(is_gen)
+        total = len(self.patterns)
+        gen_count = len(generated_files)
+        if gen_count > 0:
+            self.status_label.setText(
+                f"共 {total} 张图纸  |  🟢 已生成网页 {gen_count} 张  |  ⚪ 未生成 {total - gen_count} 张"
+            )
+        else:
+            self.status_label.setText(f"共 {total} 张图纸  |  尚未生成网页")
+
+    def _refresh_card_states(self):
+        """Update card generated badges without rebuilding (fixes flash)"""
+        generated_files = self._get_generated_filenames()
+        for card in self.pattern_cards:
+            is_gen = card.pattern.get("filename", "") in generated_files
+            card.set_generated(is_gen)
+        total = len(self.patterns)
+        gen_count = len(generated_files)
+        if gen_count > 0:
+            self.status_label.setText(
+                f"共 {total} 张图纸  |  🟢 已生成网页 {gen_count} 张  |  ⚪ 未生成 {total - gen_count} 张"
+            )
+        else:
+            self.status_label.setText(f"共 {total} 张图纸  |  尚未生成网页")
+
     def _get_generated_filenames(self):
         """解析 docs/index.html，获取已生成网页中包含的图纸文件名集合"""
         index_path = SCRIPT_DIR / "docs" / "index.html"
@@ -1426,6 +1513,8 @@ class PatternManager(QMainWindow):
 
     def _populate_cards(self, data):
         """用图纸数据重建卡片瀑布流网格"""
+        self.cards_container.setUpdatesEnabled(False)
+        self.cards_container.setUpdatesEnabled(False)
         generated_files = self._get_generated_filenames()
         self._clear_cards()
 
@@ -1458,6 +1547,10 @@ class PatternManager(QMainWindow):
             )
         else:
             self.status_label.setText(f"共 {total_count} 张图纸  |  尚未生成网页")
+        self.cards_container.setUpdatesEnabled(True)
+        self.cards_container.update()
+        self.cards_container.setUpdatesEnabled(True)
+        self.cards_container.update()
 
     def _select_card(self, pattern):
         """点击卡片时选中它（更新高亮状态，供编辑/删除按钮使用）"""
@@ -1645,7 +1738,7 @@ class PatternManager(QMainWindow):
 
     def _on_generate_done(self, ok, msg):
         """网页生成完成回调：刷新表格以更新生成状态标记"""
-        self._reload_table()  # 刷新表格，让已生成的行变绿
+        self._refresh_card_states()  # 刷新表格，让已生成的行变绿
         self._on_command_done(ok, msg)
 
     def _do_git_commands(self):
