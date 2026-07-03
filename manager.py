@@ -1,4 +1,4 @@
-﻿"""manager.py - 编织图纸管理器（双击直接运行）"""
+"""manager.py - 编织图纸管理器（双击直接运行）"""
 import subprocess
 import sys
 from pathlib import Path
@@ -65,14 +65,21 @@ VISIBLE_COLUMNS = ["filename", "title", "category", "type", "notes", "image", "u
 # 语言和难度在后台保留，表格中隐藏（网站也已移除这两个筛选项）
 HIDDEN_COLUMNS = ["language", "difficulty"]
 
-# ─── 配色（与网页一致）───
+# ─── 配色（暖棕色系，细节更精致可爱）───
 COLOR_BG = "#faf6f0"
 COLOR_CARD = "#ffffff"
 COLOR_PRIMARY = "#b85c5c"
 COLOR_PRIMARY_DARK = "#8b3a3a"
+COLOR_PRIMARY_LIGHT = "#f5e3e0"   # 浅粉棕，用于标签底色 / 选中态柔和背景
 COLOR_TEXT = "#3a3027"
 COLOR_TEXT_LIGHT = "#8a7a6a"
 COLOR_BORDER = "#e5ddd3"
+COLOR_KNIT = "#a04545"     # 棒针标签色
+COLOR_KNIT_BG = "#f7e6e6"
+COLOR_CROCHET = "#4f6fa0"  # 钩针标签色
+COLOR_CROCHET_BG = "#e7edf6"
+COLOR_SUCCESS = "#5a9c6e"  # 已生成网页 标记色
+COLOR_SUCCESS_BG = "#e5f3e8"
 FONT_FAMILY = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Segoe UI", sans-serif'
 
 try:
@@ -237,6 +244,38 @@ class PatternDialog(QDialog):
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {COLOR_BORDER}; margin: 4px 0;")
         layout.addWidget(sep)
+
+        # ═══════════════════════════════
+        #  封面图片
+        # ═══════════════════════════════
+        image_label_title = QLabel("📷 封面图片（可选）")
+        image_label_title.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 4px;")
+        layout.addWidget(image_label_title)
+
+        image_row = QHBoxLayout()
+        self.image_label = QLabel("未选择图片")
+        if is_edit and pattern.get("image"):
+            self.image_label.setText(pattern["image"])
+        self.image_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
+        self.image_label.setMinimumWidth(280)
+        btn_browse_image = QPushButton("🖼️ 选择图片")
+        btn_browse_image.setFixedWidth(120)
+        btn_browse_image.setStyleSheet(self._btn_style(primary=True))
+        btn_browse_image.clicked.connect(self._upload_image)
+        self.btn_clear_image = QPushButton("✕ 清除")
+        self.btn_clear_image.setFixedWidth(70)
+        self.btn_clear_image.setStyleSheet(self._btn_style(primary=False))
+        self.btn_clear_image.clicked.connect(self._clear_image)
+        image_row.addWidget(self.image_label)
+        image_row.addWidget(btn_browse_image)
+        image_row.addWidget(self.btn_clear_image)
+        layout.addLayout(image_row)
+
+        # 小分隔线
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet(f"color: {COLOR_BORDER}; margin: 4px 0;")
+        layout.addWidget(sep2)
 
         # ═══════════════════════════════
         #  步骤 3：手动修改关键字信息
@@ -470,10 +509,33 @@ class PatternDialog(QDialog):
             "language": self.language_combo.currentData(),
             "difficulty": self.difficulty_combo.currentData(),
             "notes": self.notes_input.toPlainText().strip(),
-            "image": self.downloaded_image if hasattr(self, "downloaded_image") else "",
+            "image": self.selected_image_filename if hasattr(self, "selected_image_filename") and self.selected_image_filename else (self.downloaded_image if hasattr(self, "downloaded_image") else ""),
             "url": self.ravelry_url_input.text().strip() if hasattr(self, "ravelry_url_input") else "",
         }
         self.accept()
+
+    def _upload_image(self):
+        """上传自定义封面图片"""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择封面图片", str(IMAGES_DIR),
+            "图片文件 (*.png *.jpg *.jpeg *.gif *.webp *.bmp)"
+        )
+        if not path:
+            return
+        src = Path(path)
+        IMAGES_DIR.mkdir(exist_ok=True)
+        dst = IMAGES_DIR / src.name
+        if src.resolve() != dst.resolve():
+            shutil.copy2(str(src), str(dst))
+        self.selected_image_filename = src.name
+        self.image_label.setText(src.name)
+        self.image_label.setStyleSheet(f"color: {COLOR_TEXT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
+
+    def _clear_image(self):
+        """清除已选择的封面图片"""
+        self.selected_image_filename = ""
+        self.image_label.setText("未选择图片")
+        self.image_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
 
     def _apply_style(self):
         self.setStyleSheet(f"""
@@ -517,8 +579,8 @@ class PatternDialog(QDialog):
                     background: {COLOR_PRIMARY};
                     color: white;
                     border: none;
-                    border-radius: 8px;
-                    padding: 8px 16px;
+                    border-radius: 11px;
+                    padding: 9px 18px;
                     font-size: 14px;
                     font-weight: bold;
                     font-family: {FONT_FAMILY};
@@ -533,14 +595,15 @@ class PatternDialog(QDialog):
                     background: {COLOR_CARD};
                     color: {COLOR_TEXT};
                     border: 2px solid {COLOR_BORDER};
-                    border-radius: 8px;
-                    padding: 8px 16px;
+                    border-radius: 11px;
+                    padding: 9px 18px;
                     font-size: 14px;
                     font-family: {FONT_FAMILY};
                 }}
                 QPushButton:hover {{
                     border-color: {COLOR_PRIMARY};
                     color: {COLOR_PRIMARY};
+                    background: {COLOR_PRIMARY_LIGHT};
                 }}
             """
 
@@ -608,100 +671,317 @@ class RavelryFetchThread(QThread):
             self.finished_signal.emit({"_error": str(e)})
 
 
+
+
 # ═══════════════════════════════════════════
-#  单元格编辑委托（下拉框）
+#  瀑布流布局（FlowLayout）
 # ═══════════════════════════════════════════
 
-class ComboBoxDelegate(QStyledItemDelegate):
-    """表格单元格编辑时显示下拉框"""
+from PyQt6.QtWidgets import QLayout, QSizePolicy
+from PyQt6.QtCore import QRect, QPoint
 
-    def __init__(self, items, editable=False, parent=None):
+
+class FlowLayout(QLayout):
+    """让子控件像瀑布流一样自动换行排列的布局"""
+
+    def __init__(self, parent=None, margin=0, h_spacing=16, v_spacing=16):
         super().__init__(parent)
-        self.items = items
-        self._editable = editable
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items = []
+        self.setContentsMargins(margin, margin, margin, margin)
 
-    def createEditor(self, parent, option, index):
-        combo = QComboBox(parent)
-        combo.addItems(self.items)
-        if self._editable:
-            combo.setEditable(True)
-            combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        # 让下拉列表宽度自适应内容，不受列宽限制
-        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        combo.setMinimumWidth(max(combo.minimumWidth(), 120))
-        combo.view().setMinimumWidth(
-            max(combo.view().fontMetrics().boundingRect(max(self.items, key=len)).width() + 40, 120)
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        margins = self.contentsMargins()
+        size += QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
+        return size
+
+    def _do_layout(self, rect, test_only):
+        left, top, right, bottom = self.getContentsMargins()
+        effective_rect = rect.adjusted(left, top, -right, -bottom)
+        x, y = effective_rect.x(), effective_rect.y()
+        line_height = 0
+
+        for item in self._items:
+            widget = item.widget()
+            if widget is not None and not widget.isVisible():
+                continue
+            item_w = item.sizeHint().width()
+            item_h = item.sizeHint().height()
+            next_x = x + item_w + self._h_spacing
+            if next_x - self._h_spacing > effective_rect.right() and line_height > 0:
+                x = effective_rect.x()
+                y = y + line_height + self._v_spacing
+                next_x = x + item_w + self._h_spacing
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+            x = next_x
+            line_height = max(line_height, item_h)
+
+        return y + line_height - rect.y() + bottom
+
+
+# ═══════════════════════════════════════════
+#  图纸卡片（瀑布流网格中的单个卡片）
+# ═══════════════════════════════════════════
+
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
+
+CARD_WIDTH = 220
+COVER_HEIGHT = 160
+
+
+def _rounded_pixmap(src_pixmap, target_size, radius):
+    """把图片裁剪缩放为圆角矩形（顶部圆角），用于卡片封面"""
+    w, h = target_size
+    scaled = src_pixmap.scaled(
+        w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    # 居中裁剪
+    x_off = max(0, (scaled.width() - w) // 2)
+    y_off = max(0, (scaled.height() - h) // 2)
+    cropped = scaled.copy(x_off, y_off, w, h)
+
+    result = QPixmap(w, h)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, w, h, radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, cropped)
+    painter.end()
+    return result
+
+
+class PatternCard(QFrame):
+    """图纸卡片：封面图 + 标题 + 分类标签 + 备注预览，悬浮时浮现编辑/删除按钮"""
+
+    def __init__(self, pattern, is_generated=False, parent=None):
+        super().__init__(parent)
+        self.pattern = pattern
+        self.on_edit = None
+        self.on_delete = None
+        self.on_select = None
+        self.setFixedWidth(CARD_WIDTH)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self._selected = False
+
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(14)
+        self._shadow.setOffset(0, 3)
+        self._shadow.setColor(QColor(184, 92, 92, 40))
+        self.setGraphicsEffect(self._shadow)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── 封面 ──
+        self.cover = QLabel()
+        self.cover.setFixedSize(CARD_WIDTH, COVER_HEIGHT)
+        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._set_cover(pattern.get("image", ""))
+        outer.addWidget(self.cover)
+
+        # ── 信息区 ──
+        info = QVBoxLayout()
+        info.setContentsMargins(12, 10, 12, 12)
+        info.setSpacing(6)
+
+        title = pattern.get("title", "") or "（未命名）"
+        self.title_label = QLabel(title)
+        self.title_label.setWordWrap(True)
+        self.title_label.setMaximumHeight(40)
+        self.title_label.setToolTip(title)
+        self.title_label.setStyleSheet(
+            f"font-size: 14px; font-weight: bold; color: {COLOR_TEXT}; "
+            f"font-family: {FONT_FAMILY}; background: transparent;"
         )
-        combo.setStyleSheet(f"""
-            QComboBox {{
-                min-width: 120px;
-                padding: 6px 10px;
-                border: 2px solid {COLOR_PRIMARY};
-                border-radius: 6px;
+        info.addWidget(self.title_label)
+
+        # 分类 + 类型 标签行
+        tag_row = QHBoxLayout()
+        tag_row.setSpacing(6)
+        cat = pattern.get("category", "")
+        ptype = pattern.get("type", "")
+        if cat:
+            tag_row.addWidget(self._make_tag(cat, is_knit=(cat == "棒针")))
+        if ptype:
+            tag_row.addWidget(self._make_tag(ptype, is_knit=None))
+        tag_row.addStretch()
+        info.addLayout(tag_row)
+
+        notes = pattern.get("notes", "").strip()
+        if notes:
+            notes_label = QLabel(notes)
+            notes_label.setWordWrap(True)
+            notes_label.setMaximumHeight(34)
+            notes_label.setStyleSheet(
+                f"font-size: 11px; color: {COLOR_TEXT_LIGHT}; "
+                f"font-family: {FONT_FAMILY}; background: transparent;"
+            )
+            info.addWidget(notes_label)
+
+        outer.addLayout(info)
+
+        # ── 已生成 徽标 ──
+        if is_generated:
+            badge = QLabel("● 已上线", self)
+            badge.setStyleSheet(
+                f"background: {COLOR_SUCCESS_BG}; color: {COLOR_SUCCESS}; "
+                f"font-size: 10px; font-weight: bold; padding: 3px 8px; "
+                f"border-radius: 8px; font-family: {FONT_FAMILY};"
+            )
+            badge.adjustSize()
+            badge.move(10, 10)
+            badge.show()
+
+        # ── 悬浮操作按钮（编辑/删除）──
+        self.btn_edit = QPushButton("✏️", self)
+        self.btn_delete = QPushButton("🗑️", self)
+        for b in (self.btn_edit, self.btn_delete):
+            b.setFixedSize(28, 28)
+            b.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            b.setStyleSheet(f"""
+                QPushButton {{
+                    background: rgba(255,255,255,0.92);
+                    border: none;
+                    border-radius: 14px;
+                    font-size: 13px;
+                }}
+                QPushButton:hover {{
+                    background: {COLOR_PRIMARY};
+                }}
+            """)
+            b.hide()
+        self.btn_edit.move(CARD_WIDTH - 66, 10)
+        self.btn_delete.move(CARD_WIDTH - 34, 10)
+        self.btn_edit.clicked.connect(lambda: self.on_edit and self.on_edit(self.pattern))
+        self.btn_delete.clicked.connect(lambda: self.on_delete and self.on_delete(self.pattern))
+
+        self._apply_frame_style()
+
+    def _make_tag(self, text, is_knit):
+        lbl = QLabel(text)
+        if is_knit is True:
+            bg, fg = COLOR_KNIT_BG, COLOR_KNIT
+        elif is_knit is False:
+            bg, fg = COLOR_CROCHET_BG, COLOR_CROCHET
+        else:
+            bg, fg = "#f1ece4", COLOR_TEXT_LIGHT
+        lbl.setStyleSheet(f"""
+            background: {bg}; color: {fg};
+            font-size: 11px; font-weight: bold;
+            padding: 2px 8px; border-radius: 8px;
+            font-family: {FONT_FAMILY};
+        """)
+        return lbl
+
+    def _set_cover(self, image_rel_path):
+        pixmap = None
+        if image_rel_path:
+            candidates = [SCRIPT_DIR / image_rel_path, IMAGES_DIR / Path(image_rel_path).name]
+            for c in candidates:
+                if c.exists():
+                    pm = QPixmap(str(c))
+                    if not pm.isNull():
+                        pixmap = pm
+                        break
+        if pixmap is not None:
+            rounded = _rounded_pixmap(pixmap, (CARD_WIDTH, COVER_HEIGHT), 14)
+            self.cover.setPixmap(rounded)
+            self.cover.setStyleSheet("background: transparent;")
+        else:
+            self.cover.setText("🧶")
+            self.cover.setStyleSheet(f"""
+                background: {COLOR_PRIMARY_LIGHT};
+                color: {COLOR_PRIMARY};
+                font-size: 40px;
+                border-top-left-radius: 14px;
+                border-top-right-radius: 14px;
+            """)
+
+    def _apply_frame_style(self, hover=False):
+        border_color = COLOR_PRIMARY if (hover or self._selected) else COLOR_BORDER
+        border_width = 2
+        self.setStyleSheet(f"""
+            PatternCard {{
                 background: {COLOR_CARD};
-                color: {COLOR_TEXT};
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
-            }}
-            QComboBox QAbstractItemView {{
-                min-width: 120px;
-                background: {COLOR_CARD};
-                selection-background-color: {COLOR_PRIMARY};
-                color: {COLOR_TEXT};
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
-                padding: 4px;
-            }}
-            QComboBox QAbstractItemView::item {{
-                padding: 6px 12px;
+                border: {border_width}px solid {border_color};
+                border-radius: 14px;
             }}
         """)
-        return combo
 
-    def setEditorData(self, editor, index):
-        value = index.data(Qt.ItemDataRole.EditRole)
-        if value:
-            idx = editor.findText(value)
-            if idx >= 0:
-                editor.setCurrentIndex(idx)
-            elif self._editable:
-                editor.setCurrentText(value)
+    def set_selected(self, selected):
+        self._selected = selected
+        self._apply_frame_style()
 
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentText())
+    def enterEvent(self, event):
+        self._apply_frame_style(hover=True)
+        self._shadow.setBlurRadius(22)
+        self._shadow.setColor(QColor(184, 92, 92, 90))
+        self.btn_edit.show()
+        self.btn_delete.show()
+        super().enterEvent(event)
 
+    def leaveEvent(self, event):
+        self._apply_frame_style(hover=False)
+        self._shadow.setBlurRadius(14)
+        self._shadow.setColor(QColor(184, 92, 92, 40))
+        self.btn_edit.hide()
+        self.btn_delete.hide()
+        super().leaveEvent(event)
 
-class LargeLineEditDelegate(QStyledItemDelegate):
-    """表格单元格编辑时使用更大的文本编辑框"""
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self.on_select:
+                self.on_select(self.pattern)
+        super().mousePressEvent(event)
 
-    def createEditor(self, parent, option, index):
-        editor = QLineEdit(parent)
-        editor.setMinimumWidth(260)
-        editor.setMinimumHeight(32)
-        editor.setStyleSheet(f"""
-            QLineEdit {{
-                padding: 8px 10px;
-                border: 2px solid {COLOR_PRIMARY};
-                border-radius: 8px;
-                background: {COLOR_CARD};
-                color: {COLOR_TEXT};
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
-            }}
-        """)
-        return editor
-
-    def setEditorData(self, editor, index):
-        if isinstance(editor, QLineEdit):
-            editor.setText(index.data(Qt.ItemDataRole.EditRole) or "")
-
-    def setModelData(self, editor, model, index):
-        if isinstance(editor, QLineEdit):
-            model.setData(index, editor.text())
-
-    def updateEditorGeometry(self, editor, option, index):
-        rect = option.rect.adjusted(-40, 0, 40, 0)
-        editor.setGeometry(rect)
+    def mouseDoubleClickEvent(self, event):
+        if self.on_edit:
+            self.on_edit(self.pattern)
+        super().mouseDoubleClickEvent(event)
 
 
 # ═══════════════════════════════════════════
@@ -730,6 +1010,11 @@ class PdfFileTab(QWidget):
         self.btn_open_folder.setStyleSheet(_btn_style_static(primary=False))
         self.btn_open_folder.clicked.connect(self._open_folder)
         top_row.addWidget(self.btn_open_folder)
+
+        self.btn_delete_pdf = QPushButton("🗑️ 删除 PDF")
+        self.btn_delete_pdf.setStyleSheet(_btn_style_static(primary=False))
+        self.btn_delete_pdf.clicked.connect(self._delete_pdf)
+        top_row.addWidget(self.btn_delete_pdf)
 
         top_row.addStretch()
 
@@ -818,10 +1103,32 @@ class PdfFileTab(QWidget):
             else:
                 subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", path])
 
+    def _delete_pdf(self):
+        """删除选中的 PDF 文件"""
+        item = self.list_widget.currentItem()
+        if item is None:
+            QMessageBox.information(self, "提示", "请先在列表中选择一个 PDF 文件")
+            return
 
-# ═══════════════════════════════════════════
-#  静态按钮样式函数（供非成员方法使用）
-# ═══════════════════════════════════════════
+        pdf_path = Path(item.data(Qt.ItemDataRole.UserRole))
+        filename = pdf_path.name
+
+        reply = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除 \"{filename}\" 吗？\n\n该操作会删除 PDF 文件本身。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            if pdf_path.exists():
+                pdf_path.unlink()
+            self.refresh()
+            if self.window() and hasattr(self.window(), "status_label"):
+                self.window().status_label.setText(f"✅ 已删除: {filename}")
+        except Exception as e:
+            QMessageBox.warning(self, "删除失败", f"无法删除文件:\n{e}")
 
 def _btn_style_static(primary=True):
     if primary:
@@ -830,14 +1137,18 @@ def _btn_style_static(primary=True):
                 background: {COLOR_PRIMARY};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                padding: 8px 16px;
+                border-radius: 11px;
+                padding: 9px 18px;
                 font-size: 14px;
                 font-weight: bold;
                 font-family: {FONT_FAMILY};
             }}
             QPushButton:hover {{
                 background: {COLOR_PRIMARY_DARK};
+            }}
+            QPushButton:pressed {{
+                background: {COLOR_PRIMARY_DARK};
+                padding-top: 10px;
             }}
             QPushButton:disabled {{
                 background: #ccc;
@@ -850,14 +1161,19 @@ def _btn_style_static(primary=True):
                 background: {COLOR_CARD};
                 color: {COLOR_TEXT};
                 border: 2px solid {COLOR_BORDER};
-                border-radius: 8px;
-                padding: 8px 16px;
+                border-radius: 11px;
+                padding: 9px 18px;
                 font-size: 14px;
                 font-family: {FONT_FAMILY};
             }}
             QPushButton:hover {{
                 border-color: {COLOR_PRIMARY};
                 color: {COLOR_PRIMARY};
+                background: {COLOR_PRIMARY_LIGHT};
+            }}
+            QPushButton:pressed {{
+                background: {COLOR_PRIMARY_LIGHT};
+                padding-top: 10px;
             }}
             QPushButton:disabled {{
                 background: #eee;
@@ -883,7 +1199,6 @@ class PatternManager(QMainWindow):
         self._build_ui()
         self._reload_table()
         self.setAcceptDrops(True)
-        QTimer.singleShot(0, self._add_pattern)
 
     # ─── UI 构建 ───
 
@@ -895,9 +1210,15 @@ class PatternManager(QMainWindow):
         main_layout.setSpacing(10)
 
         # 顶部标题
+        header_box = QVBoxLayout()
+        header_box.setSpacing(2)
         header = QLabel("🧶 编织图纸管理器")
         header.setStyleSheet(f"font-size: 22px; font-weight: bold; color: {COLOR_PRIMARY}; font-family: {FONT_FAMILY};")
-        main_layout.addWidget(header)
+        header_box.addWidget(header)
+        subtitle = QLabel("把心爱的图纸都好好收藏起来吧 ✨")
+        subtitle.setStyleSheet(f"font-size: 12px; color: {COLOR_TEXT_LIGHT}; font-family: {FONT_FAMILY};")
+        header_box.addWidget(subtitle)
+        main_layout.addLayout(header_box)
 
         # 工具栏
         toolbar = QHBoxLayout()
@@ -1002,60 +1323,24 @@ class PatternManager(QMainWindow):
                 border-color: {COLOR_PRIMARY};
             }}
         """)
-        self.search_input.textChanged.connect(self._filter_table)
+        self.search_input.textChanged.connect(self._filter_cards)
         search_row.addWidget(self.search_input)
+
+        self.count_hint_label = QLabel("")
+        self.count_hint_label.setStyleSheet(
+            f"font-size: 13px; color: {COLOR_TEXT_LIGHT}; font-family: {FONT_FAMILY}; padding-left: 4px;"
+        )
+        search_row.addWidget(self.count_hint_label)
         tab_manage_layout.addLayout(search_row)
 
-        # 表格
-        self.table = QTableWidget()
-        self.table.setColumnCount(len(HEADERS))
-        self.table.setHorizontalHeaderLabels(HEADERS)
-        # 显示所有列（包括语言和难度）
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
-        self.table.setAlternatingRowColors(True)
-        self.table.cellChanged.connect(self._on_cell_changed)
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background: {COLOR_CARD};
-                border: none;
-                gridline-color: {COLOR_BORDER};
-                font-size: 14px;
-                color: {COLOR_TEXT};
-                font-family: {FONT_FAMILY};
-                outline: none;
-            }}
-            QTableWidget::item {{
-                padding: 8px 10px;
-                background: {COLOR_CARD};
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:alternate {{
-                background: {COLOR_BG};
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:hover {{
-                background: #f5ece8;
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:selected {{
-                background: {COLOR_PRIMARY};
-                color: white;
-            }}
-            QTableWidget::item:selected:hover {{
-                background: {COLOR_PRIMARY_DARK};
-                color: white;
-            }}
-            QHeaderView::section {{
-                background: {COLOR_PRIMARY};
-                color: white;
-                padding: 10px 10px;
-                border: none;
-                font-weight: bold;
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
-            }}
+        # 卡片瀑布流网格（用 QScrollArea 包裹一个使用 FlowLayout 的容器）
+        self.selected_pattern = None
+        self.pattern_cards = []  # 当前显示的 PatternCard 列表
+
+        self.cards_scroll = QScrollArea()
+        self.cards_scroll.setWidgetResizable(True)
+        self.cards_scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
             QScrollBar:vertical {{
                 background: {COLOR_BG};
                 width: 10px;
@@ -1070,37 +1355,12 @@ class PatternManager(QMainWindow):
                 height: 0;
             }}
         """)
-        self.table.verticalHeader().setDefaultSectionSize(40)
-        self.table.verticalHeader().setMinimumSectionSize(34)
+        self.cards_container = QWidget()
+        self.cards_container.setStyleSheet("background: transparent;")
+        self.cards_flow_layout = FlowLayout(self.cards_container, margin=6, h_spacing=16, v_spacing=16)
+        self.cards_scroll.setWidget(self.cards_container)
 
-        # 列宽：全部设为 Interactive（用户可拖拽调节），设置合理的初始宽度
-        header_view = self.table.horizontalHeader()
-        header_view.setStretchLastSection(True)  # 最后一列自动占满剩余空间
-        column_widths = {
-            0: 200,   # 文件名
-            1: 220,   # 标题
-            2: 60,    # 分类
-            3: 80,    # 类型
-            4: 60,    # 语言
-            5: 60,    # 难度
-            6: 300,   # 备注
-            7: 120,   # 图片
-            8: 200,   # 网址
-        }
-        for col in range(len(HEADERS)):
-            header_view.setSectionResizeMode(col, QHeaderView.ResizeMode.Interactive)
-            if col in column_widths:
-                header_view.resizeSection(col, column_widths[col])
-        # 设置最小列宽，防止列被缩到看不见
-        for col in range(len(HEADERS)):
-            self.table.setColumnWidth(col, max(self.table.columnWidth(col), 40))
-
-        # 使用更大的文本编辑框，提高双击编辑体验
-        delegate = LargeLineEditDelegate(parent=self)
-        for col in range(1, len(HEADERS)):
-            self.table.setItemDelegateForColumn(col, delegate)
-
-        tab_manage_layout.addWidget(self.table)
+        tab_manage_layout.addWidget(self.cards_scroll)
         self.tab_widget.addTab(tab_manage, "📋  图纸管理")
 
         # ── Tab 2: PDF 文件 ──
@@ -1131,9 +1391,10 @@ class PatternManager(QMainWindow):
     # ─── 数据操作 ───
 
     def _reload_table(self):
-        """重新加载 CSV 数据到表格"""
+        """重新加载 CSV 数据到卡片网格"""
         self.patterns = load_patterns()
-        self._populate_table(self.patterns)
+        self.selected_pattern = None
+        self._populate_cards(self.patterns)
 
     def _get_generated_filenames(self):
         """解析 docs/index.html，获取已生成网页中包含的图纸文件名集合"""
@@ -1153,42 +1414,44 @@ class PatternManager(QMainWindow):
         except Exception:
             return set()
 
-    def _populate_table(self, data):
-        """填充表格数据"""
-        # 获取已生成网页中的图纸文件名
-        generated_files = self._get_generated_filenames()
+    def _clear_cards(self):
+        """清空卡片网格中的所有卡片控件"""
+        while self.cards_flow_layout.count():
+            item = self.cards_flow_layout.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        self.pattern_cards = []
 
-        self.table.blockSignals(True)  # 防止填充时触发 cellChanged
-        self.table.setRowCount(len(data))
-        for i, p in enumerate(data):
-            values = [p.get(k, "") for k in FIELDNAMES]
-            is_generated = p.get("filename", "") in generated_files
-            for j, val in enumerate(values):
-                item = QTableWidgetItem(val)
-                # 文件名列不可直接编辑（关联实际文件）
-                if j == 0:
-                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                # 已生成网页的行用浅绿色背景标记
-                if is_generated:
-                    item.setBackground(QColor("#e8f5e9"))
-                # 分类用颜色标记
-                if j == 2 and val:
-                    if val == "棒针":
-                        item.setForeground(QColor("#a04545"))
-                    elif val == "钩针":
-                        item.setForeground(QColor("#4565a0"))
-                elif j == 5 and val:  # 难度
-                    if val == "初级":
-                        item.setForeground(QColor("#2e7d32"))
-                    elif val == "中级":
-                        item.setForeground(QColor("#e65100"))
-                    elif val == "高级":
-                        item.setForeground(QColor("#c62828"))
-                self.table.setItem(i, j, item)
-        self.table.blockSignals(False)
+    def _populate_cards(self, data):
+        """用图纸数据重建卡片瀑布流网格"""
+        generated_files = self._get_generated_filenames()
+        self._clear_cards()
+
+        if not data:
+            empty_label = QLabel("🧶  还没有图纸，点击上方「添加 PDF」开始收藏吧～")
+            empty_label.setStyleSheet(
+                f"color: {COLOR_TEXT_LIGHT}; font-size: 14px; font-family: {FONT_FAMILY}; padding: 40px;"
+            )
+            empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.cards_flow_layout.addWidget(empty_label)
+        else:
+            for p in data:
+                is_generated = p.get("filename", "") in generated_files
+                card = PatternCard(p, is_generated=is_generated)
+                card.on_edit = self._edit_pattern_data
+                card.on_delete = self._delete_pattern_data
+                card.on_select = self._select_card
+                if self.selected_pattern and p.get("filename") == self.selected_pattern.get("filename"):
+                    card.set_selected(True)
+                self.cards_flow_layout.addWidget(card)
+                self.pattern_cards.append(card)
 
         generated_count = len(generated_files)
-        total_count = len(data)
+        total_count = len(self.patterns)
+        shown_count = len(data)
+        self.count_hint_label.setText(f"（显示 {shown_count} / 共 {total_count} 张）" if shown_count != total_count else "")
         if generated_count > 0:
             self.status_label.setText(
                 f"共 {total_count} 张图纸  |  🟢 已生成网页 {generated_count} 张  |  ⚪ 未生成 {total_count - generated_count} 张"
@@ -1196,39 +1459,17 @@ class PatternManager(QMainWindow):
         else:
             self.status_label.setText(f"共 {total_count} 张图纸  |  尚未生成网页")
 
-    def _on_cell_changed(self, row, col):
-        """单元格编辑后自动保存到 CSV"""
-        # 根据当前搜索状态定位对应的 pattern
-        q = self.search_input.text().strip().lower()
-        if q:
-            display_list = [
-                p for p in self.patterns
-                if q in p.get("title", "").lower()
-                or q in p.get("filename", "").lower()
-                or q in p.get("notes", "").lower()
-            ]
-        else:
-            display_list = self.patterns
+    def _select_card(self, pattern):
+        """点击卡片时选中它（更新高亮状态，供编辑/删除按钮使用）"""
+        self.selected_pattern = pattern
+        for card in self.pattern_cards:
+            card.set_selected(card.pattern.get("filename") == pattern.get("filename"))
 
-        if row >= len(display_list):
-            return
-
-        pattern = display_list[row]
-        new_value = self.table.item(row, col).text().strip() if self.table.item(row, col) else ""
-        field = FIELDNAMES[col]
-
-        if pattern[field] == new_value:
-            return  # 值没变，不保存
-
-        pattern[field] = new_value
-        save_patterns(self.patterns)
-        self.status_label.setText(f"✅ 已更新: {pattern['title']} → {HEADERS[col]}={new_value}")
-
-    def _filter_table(self):
+    def _filter_cards(self):
         """搜索过滤"""
         q = self.search_input.text().strip().lower()
         if not q:
-            self._populate_table(self.patterns)
+            self._populate_cards(self.patterns)
             return
         filtered = [
             p for p in self.patterns
@@ -1236,15 +1477,14 @@ class PatternManager(QMainWindow):
             or q in p.get("filename", "").lower()
             or q in p.get("notes", "").lower()
         ]
-        self._populate_table(filtered)
+        self._populate_cards(filtered)
 
-    def _get_selected_index(self):
-        """获取当前选中的行索引，返回 None 如果没选"""
-        row = self.table.currentRow()
-        if row < 0:
-            QMessageBox.information(self, "提示", "请先在表格中选择一行")
+    def _get_selected_pattern(self):
+        """获取当前选中的图纸，返回 None 如果没选"""
+        if self.selected_pattern is None:
+            QMessageBox.information(self, "提示", "请先点击一张图纸卡片进行选择")
             return None
-        return row
+        return self.selected_pattern
 
     def _add_pattern(self):
         """添加新图纸"""
@@ -1267,26 +1507,14 @@ class PatternManager(QMainWindow):
             self.status_label.setText(f"✅ 已添加: {data['title']}")
 
     def _edit_pattern(self):
-        """编辑选中的图纸"""
-        row = self._get_selected_index()
-        if row is None:
+        """编辑选中的图纸（工具栏「✏️ 编辑」按钮）"""
+        pattern = self._get_selected_pattern()
+        if pattern is None:
             return
+        self._edit_pattern_data(pattern)
 
-        q = self.search_input.text().strip().lower()
-        if q:
-            display_list = [
-                p for p in self.patterns
-                if q in p.get("title", "").lower()
-                or q in p.get("filename", "").lower()
-                or q in p.get("notes", "").lower()
-            ]
-        else:
-            display_list = self.patterns
-
-        if row >= len(display_list):
-            return
-        pattern = display_list[row]
-
+    def _edit_pattern_data(self, pattern):
+        """编辑指定图纸（卡片双击 / 卡片上的编辑按钮 均走这里）"""
         existing_files = {p["filename"] for p in self.patterns if p["filename"] != pattern["filename"]}
         dialog = PatternDialog(self, pattern=pattern, existing_files=existing_files)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_data:
@@ -1304,30 +1532,19 @@ class PatternManager(QMainWindow):
                     break
 
             save_patterns(self.patterns)
-            self._reload_table()
+            self.selected_pattern = data
+            self._populate_cards_from_search()
             self.status_label.setText(f"✅ 已更新: {data['title']}")
 
     def _delete_pattern(self):
-        """删除选中的图纸"""
-        row = self._get_selected_index()
-        if row is None:
+        """删除选中的图纸（工具栏「🗑️ 删除」按钮）"""
+        pattern = self._get_selected_pattern()
+        if pattern is None:
             return
+        self._delete_pattern_data(pattern)
 
-        q = self.search_input.text().strip().lower()
-        if q:
-            display_list = [
-                p for p in self.patterns
-                if q in p.get("title", "").lower()
-                or q in p.get("filename", "").lower()
-                or q in p.get("notes", "").lower()
-            ]
-        else:
-            display_list = self.patterns
-
-        if row >= len(display_list):
-            return
-        pattern = display_list[row]
-
+    def _delete_pattern_data(self, pattern):
+        """删除指定图纸（卡片上的删除按钮 也走这里）"""
         reply = QMessageBox.question(
             self, "确认删除",
             f"确定要删除 '{pattern['title']}' 吗？\n\n"
@@ -1339,9 +1556,25 @@ class PatternManager(QMainWindow):
                 p for p in self.patterns
                 if p["filename"] != pattern["filename"]
             ]
+            if self.selected_pattern and self.selected_pattern.get("filename") == pattern["filename"]:
+                self.selected_pattern = None
             save_patterns(self.patterns)
-            self._reload_table()
+            self._populate_cards_from_search()
             self.status_label.setText(f"✅ 已删除: {pattern['title']}")
+
+    def _populate_cards_from_search(self):
+        """按当前搜索关键词重新渲染卡片网格（保留搜索状态，而不是清空搜索）"""
+        q = self.search_input.text().strip().lower()
+        if not q:
+            self._populate_cards(self.patterns)
+        else:
+            filtered = [
+                p for p in self.patterns
+                if q in p.get("title", "").lower()
+                or q in p.get("filename", "").lower()
+                or q in p.get("notes", "").lower()
+            ]
+            self._populate_cards(filtered)
 
     def _scan_folder(self):
         """扫描 patterns/ 文件夹，发现未登记的 PDF"""
@@ -1522,92 +1755,32 @@ class PatternManager(QMainWindow):
         self.status_label.setText(f"✅ 已添加 {added} 张图纸（共 {len(self.patterns)} 张）")
 
     def _drag_highlight_on(self):
-        """拖拽时高亮表格边框"""
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background: {COLOR_CARD};
+        """拖拽时给卡片网格区域加一个可爱的虚线高亮边框"""
+        self.cards_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                background: {COLOR_PRIMARY_LIGHT};
                 border: 2px dashed {COLOR_PRIMARY};
-                border-radius: 10px;
-                gridline-color: {COLOR_BORDER};
-                font-size: 14px;
-                color: {COLOR_TEXT};
-                font-family: {FONT_FAMILY};
-                outline: none;
+                border-radius: 14px;
             }}
-            QTableWidget::item {{
-                padding: 8px 10px;
-                background: {COLOR_CARD};
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:alternate {{
+            QScrollBar:vertical {{
                 background: {COLOR_BG};
-                color: {COLOR_TEXT};
+                width: 10px;
+                border-radius: 5px;
             }}
-            QTableWidget::item:hover {{
-                background: #f5ece8;
-                color: {COLOR_TEXT};
+            QScrollBar::handle:vertical {{
+                background: {COLOR_BORDER};
+                border-radius: 5px;
+                min-height: 30px;
             }}
-            QTableWidget::item:selected {{
-                background: {COLOR_PRIMARY};
-                color: white;
-            }}
-            QTableWidget::item:selected:hover {{
-                background: {COLOR_PRIMARY_DARK};
-                color: white;
-            }}
-            QHeaderView::section {{
-                background: {COLOR_PRIMARY};
-                color: white;
-                padding: 10px 10px;
-                border: none;
-                font-weight: bold;
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
             }}
         """)
 
     def _drag_highlight_off(self):
-        """恢复表格原有样式"""
-        self.table.setStyleSheet(f"""
-            QTableWidget {{
-                background: {COLOR_CARD};
-                border: none;
-                gridline-color: {COLOR_BORDER};
-                font-size: 14px;
-                color: {COLOR_TEXT};
-                font-family: {FONT_FAMILY};
-                outline: none;
-            }}
-            QTableWidget::item {{
-                padding: 8px 10px;
-                background: {COLOR_CARD};
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:alternate {{
-                background: {COLOR_BG};
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:hover {{
-                background: #f5ece8;
-                color: {COLOR_TEXT};
-            }}
-            QTableWidget::item:selected {{
-                background: {COLOR_PRIMARY};
-                color: white;
-            }}
-            QTableWidget::item:selected:hover {{
-                background: {COLOR_PRIMARY_DARK};
-                color: white;
-            }}
-            QHeaderView::section {{
-                background: {COLOR_PRIMARY};
-                color: white;
-                padding: 10px 10px;
-                border: none;
-                font-weight: bold;
-                font-size: 14px;
-                font-family: {FONT_FAMILY};
-            }}
+        """恢复卡片网格区域的原有样式"""
+        self.cards_scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
             QScrollBar:vertical {{
                 background: {COLOR_BG};
                 width: 10px;
