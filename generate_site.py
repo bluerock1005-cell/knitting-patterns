@@ -110,7 +110,7 @@ def build_html(patterns):
             --border: #e5ddd3;
             --shadow: 0 2px 12px rgba(0,0,0,0.06);
             --radius: 14px;
-            --sidebar-width: 180px;
+            --sidebar-width: 220px;
         }}
 
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -161,6 +161,23 @@ def build_html(patterns):
             position: sticky;
             top: 1rem;
             align-self: flex-start;
+        }}
+        .sidebar-search {{
+            margin-bottom: 0.8rem;
+        }}
+        .sidebar-search input {{
+            width: 100%;
+            padding: 0.5rem 0.7rem;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.85rem;
+            transition: border-color 0.2s;
+            background: var(--bg);
+            color: var(--text);
+        }}
+        .sidebar-search input:focus {{
+            outline: none;
+            border-color: var(--primary);
         }}
         .sidebar-section {{
             margin-bottom: 1rem;
@@ -228,7 +245,7 @@ def build_html(patterns):
             min-width: 0;
         }}
 
-        /* ─── 搜索栏 ─── */
+        /* ─── 顶部工具栏（仅统计 + 抽屉按钮）─── */
         .toolbar {{
             background: var(--card-bg);
             border-radius: var(--radius);
@@ -238,32 +255,6 @@ def build_html(patterns):
             align-items: center;
             gap: 0.8rem;
             margin-bottom: 1rem;
-        }}
-        .search-box {{
-            flex: 1;
-            position: relative;
-        }}
-        .search-box input {{
-            width: 100%;
-            padding: 0.5rem 0.8rem 0.5rem 2.2rem;
-            border: 2px solid var(--border);
-            border-radius: 10px;
-            font-size: 0.92rem;
-            transition: border-color 0.2s;
-            background: var(--bg);
-            color: var(--text);
-        }}
-        .search-box input:focus {{
-            outline: none;
-            border-color: var(--primary);
-        }}
-        .search-box::before {{
-            content: "🔍";
-            position: absolute;
-            left: 0.6rem;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.85rem;
         }}
         .stats {{
             font-size: 0.82rem;
@@ -477,10 +468,6 @@ def build_html(patterns):
             .toolbar {{
                 flex-wrap: wrap;
             }}
-            .search-box {{
-                flex: 1 1 100%;
-                order: 2;
-            }}
             .drawer-toggle {{
                 order: 1;
             }}
@@ -505,6 +492,9 @@ def build_html(patterns):
 
     <div class="layout">
         <aside class="sidebar" id="sidebar">
+            <div class="sidebar-search">
+                <input type="text" id="search" placeholder="🔍 搜索…" />
+            </div>
             <div class="sidebar-section">
                 <div class="sidebar-title">分类</div>
                 <button class="sidebar-item cat-item active" data-category="">
@@ -526,9 +516,6 @@ def build_html(patterns):
         <div class="content">
             <div class="toolbar">
                 <button class="drawer-toggle" id="drawer-toggle">☰ 筛选</button>
-                <div class="search-box">
-                    <input type="text" id="search" placeholder="搜索标题、作者、线材、密度、针码…" />
-                </div>
                 <span class="stats" id="stats"></span>
             </div>
 
