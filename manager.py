@@ -168,6 +168,7 @@ class PatternDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
+        layout.setContentsMargins(24, 12, 24, 12)
         # 整体左对齐，保证内部行从左侧开始布局
         layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
@@ -186,8 +187,8 @@ class PatternDialog(QDialog):
         self.file_label.setFixedWidth(420)
         # 左上对齐文本，基准于第一行
         self.file_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        btn_browse = QPushButton("📂 选择 PDF" if not is_edit else "📂 更换文件")
-        btn_browse.setFixedWidth(120)
+        btn_browse = QPushButton("选择 PDF" if not is_edit else "更换文件")
+        btn_browse.setFixedWidth(100)
         btn_browse.setStyleSheet(self._btn_style(primary=True))
         btn_browse.clicked.connect(self._browse_pdf)
         file_row.addWidget(self.file_label)
@@ -240,12 +241,12 @@ class PatternDialog(QDialog):
 
         # 清除按钮（位于读取按钮右侧），确保文字不被截断
         self.btn_clear_url = QPushButton("清除")
-        self.btn_clear_url.setFixedWidth(80)
+        self.btn_clear_url.setFixedWidth(100)
         self.btn_clear_url.setStyleSheet(self._btn_style(primary=False))
         self.btn_clear_url.clicked.connect(self._clear_ravelry_url)
         ravelry_row.addWidget(self.btn_clear_url)
 
-        self.ravelry_status = QLabel("粘贴后自动读取")
+        self.ravelry_status = QLabel("自动读取")
         self.ravelry_status.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_LIGHT};")
         self.ravelry_status.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         ravelry_row.addWidget(self.ravelry_status)
@@ -281,11 +282,11 @@ class PatternDialog(QDialog):
         self.image_label.setFixedWidth(420)
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         btn_browse_image = QPushButton("选择图片")
-        btn_browse_image.setFixedWidth(120)
+        btn_browse_image.setFixedWidth(100)
         btn_browse_image.setStyleSheet(self._btn_style(primary=True))
         btn_browse_image.clicked.connect(self._upload_image)
         self.btn_clear_image = QPushButton("清除")
-        self.btn_clear_image.setFixedWidth(80)
+        self.btn_clear_image.setFixedWidth(100)
         self.btn_clear_image.setStyleSheet(self._btn_style(primary=False))
         self.btn_clear_image.clicked.connect(self._clear_image)
         image_row.addWidget(self.image_label)
@@ -306,38 +307,39 @@ class PatternDialog(QDialog):
         step3_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 6px;")
         layout.addWidget(step3_label)
 
-        form = QFormLayout()
+        form = QVBoxLayout()
         form.setSpacing(10)
         form.setContentsMargins(0, 0, 0, 0)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        # 标签与字段左对齐
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        # 标题
+        # 标题行
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.title_input = QLineEdit(pattern["title"] if is_edit else "")
         self.title_input.setPlaceholderText("图纸名称…")
-        # 固定名称输入宽度并左对齐
-        self.title_input.setFixedWidth(380)
+        self.title_input.setFixedWidth(420)
         self.title_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        form.addRow("名称:", self.title_input)
+        title_row.addWidget(self.title_input)
+        title_row.addStretch()
+        form.addLayout(title_row)
 
-        # 分类 + 类型 同行（纯文本输入）
-        cat_type_row = QHBoxLayout()
+        # 分类 + 类型 行
+        category_row = QHBoxLayout()
+        category_row.setContentsMargins(0, 0, 0, 0)
+        category_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.category_input = QLineEdit(pattern["category"] if is_edit else "")
         self.category_input.setPlaceholderText("分类")
-        self.category_input.setFixedWidth(120)
+        self.category_input.setFixedWidth(205)
         self.category_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        cat_type_row.addWidget(self.category_input)
-
+        category_row.addWidget(self.category_input)
         self.type_input = QLineEdit(pattern["type"] if is_edit else "")
         self.type_input.setPlaceholderText("类型")
-        self.type_input.setFixedWidth(120)
+        self.type_input.setFixedWidth(205)
         self.type_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        cat_type_row.addWidget(self.type_input)
-        cat_type_row.addStretch()
-        cat_type_widget = QWidget()
-        cat_type_widget.setLayout(cat_type_row)
-        form.addRow("属性:", cat_type_widget)
+        category_row.addWidget(self.type_input)
+        category_row.addStretch()
+        form.addLayout(category_row)
 
         # 语言 + 难度（后台保存，界面不显示，与网站一致）
         self.language_combo = QComboBox()
@@ -356,19 +358,22 @@ class PatternDialog(QDialog):
             idx = DIFFICULTIES.index(pattern["difficulty"]) + 1 if pattern["difficulty"] in DIFFICULTIES else 0
             self.difficulty_combo.setCurrentIndex(idx)
 
-        # 备注
+        # 备注行
+        note_row = QHBoxLayout()
+        note_row.setContentsMargins(0, 0, 0, 0)
+        note_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
         self.notes_input.setPlaceholderText("作者、线材、密度、针码、用量、尺码…")
-        # 增大备注栏高度以便显示更多信息，但保持固定高度，使用滚动避免影响父布局；文本左对齐
         self.notes_input.setFixedHeight(160)
         self.notes_input.setFixedWidth(420)
         self.notes_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         try:
-            # QTextEdit 支持 setAlignment
             self.notes_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         except Exception:
             pass
-        form.addRow("备注:", self.notes_input)
+        note_row.addWidget(self.notes_input)
+        note_row.addStretch()
+        form.addLayout(note_row)
 
         layout.addLayout(form)
 
@@ -812,7 +817,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
 
 CARD_WIDTH = 220
 COVER_HEIGHT = 160
-CARD_HEIGHT = 320
+CARD_HEIGHT = 330
 
 
 def _rounded_pixmap(src_pixmap, target_size, radius):
@@ -911,6 +916,7 @@ class PatternCard(QFrame):
             notes_label.setStyleSheet(
                 f"font-size: 11px; color: {COLOR_TEXT_LIGHT}; "
                 f"font-family: {FONT_FAMILY}; background: transparent;"
+                f"padding-top: 4px;"
             )
             notes_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             info.addWidget(notes_label)
