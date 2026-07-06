@@ -168,18 +168,24 @@ class PatternDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setSpacing(14)
+        # 整体左对齐，保证内部行从左侧开始布局
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         # ═══════════════════════════════
         #  步骤 1：选择 PDF
         # ═══════════════════════════════
         step1_label = QLabel("① 选择 PDF 文件")
-        step1_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY};")
+        step1_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 6px;")
         layout.addWidget(step1_label)
 
         file_row = QHBoxLayout()
+        file_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.file_label = QLabel(pattern["filename"] if is_edit else "未选择文件")
         self.file_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
-        self.file_label.setMinimumWidth(280)
+        # 固定显示宽度，避免随窗口伸缩
+        self.file_label.setFixedWidth(420)
+        # 左上对齐文本，基准于第一行
+        self.file_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         btn_browse = QPushButton("📂 选择 PDF" if not is_edit else "📂 更换文件")
         btn_browse.setFixedWidth(120)
         btn_browse.setStyleSheet(self._btn_style(primary=True))
@@ -204,6 +210,7 @@ class PatternDialog(QDialog):
         layout.addWidget(step2_label)
 
         ravelry_row = QHBoxLayout()
+        ravelry_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.ravelry_url_input = QLineEdit()
         if is_edit and pattern:
             self.ravelry_url_input.setText(pattern.get("url", ""))
@@ -219,16 +226,28 @@ class PatternDialog(QDialog):
             }}
             QLineEdit:focus {{ border-color: {COLOR_PRIMARY}; }}
         """)
+        # 固定网址输入宽度，避免拉宽对话框其他元素；文本左对齐
+        self.ravelry_url_input.setFixedWidth(420)
+        self.ravelry_url_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         ravelry_row.addWidget(self.ravelry_url_input)
 
-        self.btn_fetch_ravelry = QPushButton("🔍 读取")
-        self.btn_fetch_ravelry.setFixedWidth(80)
+        self.btn_fetch_ravelry = QPushButton("读取")
+        # 固定按钮宽度以显示完整文字且不随布局伸缩
+        self.btn_fetch_ravelry.setFixedWidth(100)
         self.btn_fetch_ravelry.setStyleSheet(self._btn_style(primary=True))
         self.btn_fetch_ravelry.clicked.connect(self._fetch_ravelry)
         ravelry_row.addWidget(self.btn_fetch_ravelry)
 
+        # 清除按钮（位于读取按钮右侧），确保文字不被截断
+        self.btn_clear_url = QPushButton("清除")
+        self.btn_clear_url.setFixedWidth(80)
+        self.btn_clear_url.setStyleSheet(self._btn_style(primary=False))
+        self.btn_clear_url.clicked.connect(self._clear_ravelry_url)
+        ravelry_row.addWidget(self.btn_clear_url)
+
         self.ravelry_status = QLabel("粘贴后自动读取")
         self.ravelry_status.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_LIGHT};")
+        self.ravelry_status.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         ravelry_row.addWidget(self.ravelry_status)
         layout.addLayout(ravelry_row)
 
@@ -248,22 +267,25 @@ class PatternDialog(QDialog):
         # ═══════════════════════════════
         #  封面图片
         # ═══════════════════════════════
-        image_label_title = QLabel("📷 封面图片（可选）")
-        image_label_title.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 4px;")
+        image_label_title = QLabel("封面图片（可选）")
+        image_label_title.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 6px;")
         layout.addWidget(image_label_title)
 
         image_row = QHBoxLayout()
+        image_row.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.image_label = QLabel("未选择图片")
         if is_edit and pattern.get("image"):
             self.image_label.setText(pattern["image"])
         self.image_label.setStyleSheet(f"color: {COLOR_TEXT_LIGHT}; font-size: 13px; padding: 6px; border: 2px solid {COLOR_BORDER}; border-radius: 8px; background: {COLOR_CARD};")
-        self.image_label.setMinimumWidth(280)
-        btn_browse_image = QPushButton("🖼️ 选择图片")
+        # 固定图片标签宽度，左上对齐文本
+        self.image_label.setFixedWidth(420)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        btn_browse_image = QPushButton("选择图片")
         btn_browse_image.setFixedWidth(120)
         btn_browse_image.setStyleSheet(self._btn_style(primary=True))
         btn_browse_image.clicked.connect(self._upload_image)
-        self.btn_clear_image = QPushButton("✕ 清除")
-        self.btn_clear_image.setFixedWidth(70)
+        self.btn_clear_image = QPushButton("清除")
+        self.btn_clear_image.setFixedWidth(80)
         self.btn_clear_image.setStyleSheet(self._btn_style(primary=False))
         self.btn_clear_image.clicked.connect(self._clear_image)
         image_row.addWidget(self.image_label)
@@ -281,27 +303,36 @@ class PatternDialog(QDialog):
         #  步骤 3：手动修改关键字信息
         # ═══════════════════════════════
         step3_label = QLabel("③ 确认/修改图纸信息")
-        step3_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY};")
+        step3_label.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {COLOR_PRIMARY}; margin-top: 6px;")
         layout.addWidget(step3_label)
 
         form = QFormLayout()
         form.setSpacing(10)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        # 标签与字段左对齐
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
 
         # 标题
         self.title_input = QLineEdit(pattern["title"] if is_edit else "")
         self.title_input.setPlaceholderText("图纸名称…")
+        # 固定名称输入宽度并左对齐
+        self.title_input.setFixedWidth(380)
+        self.title_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         form.addRow("名称:", self.title_input)
 
         # 分类 + 类型 同行（纯文本输入）
         cat_type_row = QHBoxLayout()
         self.category_input = QLineEdit(pattern["category"] if is_edit else "")
         self.category_input.setPlaceholderText("分类")
-        self.category_input.setMinimumWidth(120)
+        self.category_input.setFixedWidth(120)
+        self.category_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         cat_type_row.addWidget(self.category_input)
 
         self.type_input = QLineEdit(pattern["type"] if is_edit else "")
         self.type_input.setPlaceholderText("类型")
-        self.type_input.setMinimumWidth(120)
+        self.type_input.setFixedWidth(120)
+        self.type_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
         cat_type_row.addWidget(self.type_input)
         cat_type_row.addStretch()
         cat_type_widget = QWidget()
@@ -328,7 +359,15 @@ class PatternDialog(QDialog):
         # 备注
         self.notes_input = QTextEdit(pattern["notes"] if is_edit else "")
         self.notes_input.setPlaceholderText("作者、线材、密度、针码、用量、尺码…")
-        self.notes_input.setFixedHeight(80)
+        # 增大备注栏高度以便显示更多信息，但保持固定高度，使用滚动避免影响父布局；文本左对齐
+        self.notes_input.setFixedHeight(160)
+        self.notes_input.setFixedWidth(420)
+        self.notes_input.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        try:
+            # QTextEdit 支持 setAlignment
+            self.notes_input.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        except Exception:
+            pass
         form.addRow("备注:", self.notes_input)
 
         layout.addLayout(form)
@@ -377,6 +416,13 @@ class PatternDialog(QDialog):
             # 先从 URL 提取名称填入标题
             self._guess_title_from_url(url)
             self._fetch_ravelry()
+
+    def _clear_ravelry_url(self):
+        """清除 Ravelry URL 输入和状态提示"""
+        self.ravelry_url_input.clear()
+        self._last_fetched_url = ""
+        self.ravelry_status.setText("粘贴后自动读取")
+        self.ravelry_status.setStyleSheet(f"font-size: 11px; color: {COLOR_TEXT_LIGHT};")
 
     def _guess_title_from_url(self, url):
         """从 Ravelry URL 的最后一段提取图纸名称"""
@@ -766,6 +812,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QCursor
 
 CARD_WIDTH = 220
 COVER_HEIGHT = 160
+CARD_HEIGHT = 320
 
 
 def _rounded_pixmap(src_pixmap, target_size, radius):
@@ -802,6 +849,8 @@ class PatternCard(QFrame):
         self.on_delete = None
         self.on_select = None
         self.setFixedWidth(CARD_WIDTH)
+        # 统一卡片高度，确保网格中卡片尺寸一致并能显示全部信息
+        self.setFixedHeight(CARD_HEIGHT)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self._selected = False
@@ -831,7 +880,9 @@ class PatternCard(QFrame):
         title = pattern.get("title", "") or "（未命名）"
         self.title_label = QLabel(title)
         self.title_label.setWordWrap(True)
-        self.title_label.setMaximumHeight(40)
+        # 增加标题可用高度，避免长标题被截断
+        self.title_label.setMaximumHeight(60)
+        self.title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.title_label.setToolTip(title)
         self.title_label.setStyleSheet(
             f"font-size: 14px; font-weight: bold; color: {COLOR_TEXT}; "
@@ -855,12 +906,17 @@ class PatternCard(QFrame):
         if notes:
             notes_label = QLabel(notes)
             notes_label.setWordWrap(True)
-            notes_label.setMaximumHeight(34)
+            # 允许备注显示多行，给出更大的最大高度以显示更多信息
+            notes_label.setMaximumHeight(120)
             notes_label.setStyleSheet(
                 f"font-size: 11px; color: {COLOR_TEXT_LIGHT}; "
                 f"font-family: {FONT_FAMILY}; background: transparent;"
             )
+            notes_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
             info.addWidget(notes_label)
+
+        # 在信息区底部加入弹性间隔，保证标签/标题等内容靠上显示
+        info.addStretch()
 
         outer.addLayout(info)
 
@@ -950,6 +1006,9 @@ class PatternCard(QFrame):
             padding: 2px 8px; border-radius: 8px;
             font-family: {FONT_FAMILY};
         """)
+        # 固定标签高度，防止在固定卡片高度下纵向拉伸
+        lbl.setFixedHeight(24)
+        lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         return lbl
 
     def _set_cover(self, image_rel_path):
@@ -1381,6 +1440,8 @@ class PatternManager(QMainWindow):
             }}
         """)
         self.search_input.textChanged.connect(self._filter_cards)
+        # 固定搜索框宽度，避免影响工具栏布局
+        self.search_input.setFixedWidth(520)
         search_row.addWidget(self.search_input)
 
         self.count_hint_label = QLabel("")
