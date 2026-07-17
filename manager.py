@@ -9,7 +9,7 @@ VENV_DIR = HERE / ".venv"
 VENV_PY = VENV_DIR / "Scripts" / "python.exe"
 VENV_PYW = VENV_DIR / "Scripts" / "pythonw.exe"
 
-if not VENV_PY.exists():
+if not getattr(sys, "frozen", False) and not VENV_PY.exists():
     print("正在创建虚拟环境，首次运行需要1-2分钟…")
     subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
     subprocess.run(
@@ -19,7 +19,7 @@ if not VENV_PY.exists():
     )
     print("初始化完成，正在启动…")
 
-if str(sys.executable).lower() not in (str(VENV_PY).lower(), str(VENV_PYW).lower()):
+if not getattr(sys, "frozen", False) and str(sys.executable).lower() not in (str(VENV_PY).lower(), str(VENV_PYW).lower()):
     # 如果是从 pythonw.exe 启动的（无窗口），继续用 pythonw.exe 启动
     target = str(VENV_PYW) if sys.executable.lower().endswith('pythonw.exe') else str(VENV_PY)
     subprocess.Popen([target, __file__])
@@ -38,12 +38,13 @@ import os
 import re
 import shutil
 
-  # ─── 路径常量 ───
-SCRIPT_DIR = Path(__file__).parent.resolve()
-CSV_PATH = SCRIPT_DIR / "patterns.csv"
-PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
-GENERATE_SCRIPT = SCRIPT_DIR / "generate_site.py"
-IMAGES_DIR = SCRIPT_DIR / "docs" / "images"
+# ─── 路径常量（打包后统一指向 .exe 所在目录，数据才不会被临时目录清掉）───
+from appbase import app_dir
+APP_DIR = app_dir()
+CSV_PATH = APP_DIR / "patterns.csv"
+PDF_DIR = APP_DIR / "docs" / "patterns"
+IMAGES_DIR = APP_DIR / "docs" / "images"
+# 注：生成网页改为直接 import generate_site 调用，不再走子进程
 
 # 尝试导入 Ravelry 抓取模块
 try:
@@ -574,7 +575,7 @@ class PatternDialog(QDialog):
         if not path:
             return
         src = Path(path)
-        IMAGES_DIR.mkdir(exist_ok=True)
+        IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         dst = IMAGES_DIR / src.name
         if src.resolve() != dst.resolve():
             shutil.copy2(str(src), str(dst))
@@ -671,7 +672,7 @@ class CommandThread(QThread):
     def __init__(self, cmd, cwd=None):
         super().__init__()
         self.cmd = cmd
-        self.cwd = cwd or str(SCRIPT_DIR)
+        self.cwd = cwd or str(APP_DIR)
 
     def run(self):
         try:
@@ -702,6 +703,23 @@ class CommandThread(QThread):
 # ═══════════════════════════════════════════
 #  Ravelry 异步抓取线程
 # ═══════════════════════════════════════════
+
+class GenerateThread(QThread):
+    """后台直接调用 generate_site.generate()，取代原先的子进程调用。"""
+    finished_signal = pyqtSignal(bool, str)
+
+    def __init__(self, base_dir):
+        super().__init__()
+        self.base_dir = base_dir
+
+    def run(self):
+        try:
+            import generate_site
+            generate_site.generate(str(self.base_dir))
+            self.finished_signal.emit(True, "网页已生成")
+        except Exception as e:
+            self.finished_signal.emit(False, str(e))
+
 
 class RavelryFetchThread(QThread):
     """后台抓取 Ravelry 数据，避免界面卡死"""
@@ -1020,7 +1038,7 @@ class PatternCard(QFrame):
     def _set_cover(self, image_rel_path):
         pixmap = None
         if image_rel_path:
-            candidates = [SCRIPT_DIR / image_rel_path, IMAGES_DIR / Path(image_rel_path).name]
+            candidates = [APP_DIR / image_rel_path, IMAGES_DIR / Path(image_rel_path).name]
             for c in candidates:
                 if c.exists():
                     pm = QPixmap(str(c))
@@ -1188,7 +1206,7 @@ class PdfFileTab(QWidget):
 
     def _open_folder(self):
         """在文件资源管理器中打开 patterns/ 文件夹"""
-        PDF_DIR.mkdir(exist_ok=True)
+        PDF_DIR.mkdir(parents=True, exist_ok=True)
         if os.name == "nt":
             os.startfile(str(PDF_DIR))
         else:
@@ -1552,7 +1570,7 @@ class PatternManager(QMainWindow):
 
     def _get_generated_filenames(self):
         """解析 docs/index.html，获取已生成网页中包含的图纸文件名集合"""
-        index_path = SCRIPT_DIR / "docs" / "index.html"
+        index_path = APP_DIR / "docs" / "index.html"
         if not index_path.exists():
             return set()
 
@@ -1657,7 +1675,7 @@ class PatternManager(QMainWindow):
             if dialog.selected_pdf_path:
                 src = dialog.selected_pdf_path
                 dst = PDF_DIR / data["filename"]
-                PDF_DIR.mkdir(exist_ok=True)
+                PDF_DIR.mkdir(parents=True, exist_ok=True)
                 if src.resolve() != dst.resolve():
                     shutil.copy2(str(src), str(dst))
 
@@ -1778,30 +1796,29 @@ class PatternManager(QMainWindow):
             self._reload_table()
             self.status_label.setText(f"✅ 已添加 {len(new_pdfs)} 张图纸，请补充分类和类型等信息")
 
+    def _run_generate(self, on_done):
+        """后台生成网页；完成后回调 on_done(ok, msg)。"""
+        self.gen_thread = GenerateThread(APP_DIR)
+        self.gen_thread.finished_signal.connect(on_done)
+        self.gen_thread.start()
+
     def _generate_site(self):
         """生成网页"""
-        py_exe = sys.executable
-        self.cmd_thread = CommandThread([py_exe, str(GENERATE_SCRIPT)])
-        self.cmd_thread.output.connect(
-            lambda text: self.status_label.setText(text.strip() or self.status_label.text())
-        )
-        self.cmd_thread.finished_signal.connect(
-            lambda ok, msg: self._on_generate_done(ok, msg)
-        )
         self.btn_generate.setEnabled(False)
         self.status_label.setText("正在生成网页…")
-        self.cmd_thread.start()
+        self._run_generate(self._on_generate_done)
 
     def _push_github(self):
-        """推送到 GitHub"""
-        py_exe = sys.executable
-        self.cmd_thread = CommandThread([py_exe, str(GENERATE_SCRIPT)])
-        self.cmd_thread.finished_signal.connect(
-            lambda ok, msg: self._do_git_commands() if ok else self._on_generate_done(ok, msg)
-        )
+        """生成网页并推送到 GitHub"""
         self.btn_push.setEnabled(False)
         self.status_label.setText("正在生成网页并推送到 GitHub…")
-        self.cmd_thread.start()
+        self._run_generate(self._after_generate_for_push)
+
+    def _after_generate_for_push(self, ok, msg):
+        if ok:
+            self._do_git_commands()
+        else:
+            self._on_generate_done(ok, msg)
 
     def _on_generate_done(self, ok, msg):
         """网页生成完成回调：刷新表格以更新生成状态标记"""
@@ -1904,7 +1921,7 @@ class PatternManager(QMainWindow):
                 if dialog.selected_pdf_path:
                     src = dialog.selected_pdf_path
                     dst = PDF_DIR / data["filename"]
-                    PDF_DIR.mkdir(exist_ok=True)
+                    PDF_DIR.mkdir(parents=True, exist_ok=True)
                     if src.resolve() != dst.resolve():
                         shutil.copy2(str(src), str(dst))
                 self.patterns.insert(0, data)
@@ -1985,8 +2002,8 @@ class PatternManager(QMainWindow):
 # ═══════════════════════════════════════════
 
 def main():
-    # 确保 patterns 文件夹存在
-    PDF_DIR.mkdir(exist_ok=True)
+    # 确保数据目录存在（首次运行时 docs/ 与 docs/patterns 可能都还不存在）
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
 
     app = QApplication(sys.argv)
     app.setApplicationName("编织图纸管理器")

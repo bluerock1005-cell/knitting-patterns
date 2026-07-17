@@ -18,3 +18,30 @@ desktop.ini
 
 # Test files
 test_*
+
+# ─── 打包 / 构建产物（绝不进 git）───
+*.zip
+build/
+build_*/
+dist/
+dist_*/
+b_diag/
+d_diag/
+*.spec
+
+# 发布用 exe 包（通过 zip 分享，不入库）
+编织图纸管理器_*/
+
+# 打包过程临时脚本
+_pkg.py
+_verify.py
+_cleanup.py
+_rt*/
+_runtest/
+_gentest/
+_diag*
+_tasks.csv
+_setup.log
+_smoke.log
+_kill.log
+appdir_debug.txt

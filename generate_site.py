@@ -10,16 +10,11 @@ import os
 import sys
 from pathlib import Path
 
+from appbase import app_dir
+
 # Windows 控制台 UTF-8 输出
 if sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
-
-# ─── 路径配置 ───
-SCRIPT_DIR = Path(__file__).parent.resolve()
-CSV_PATH = SCRIPT_DIR / "patterns.csv"
-PDF_DIR = SCRIPT_DIR / "docs" / "patterns"
-OUTPUT_DIR = SCRIPT_DIR / "docs"
-OUTPUT_FILE = OUTPUT_DIR / "index.html"
 
 # ─── 分类中文映射（可选，留空则直接显示原始值）───
 CATEGORY_LABELS = {
@@ -682,7 +677,18 @@ def build_html(patterns):
     return html
 
 
-def main():
+def generate(base_dir=None):
+    """根据 patterns.csv 生成 docs/index.html。
+
+    base_dir: 数据根目录。打包成 .exe 后由 manager 传入 .exe 所在目录，
+    确保生成的网站与 CSV/PDF 放在一起。开发模式可省略（自动取脚本目录）。
+    """
+    base = Path(base_dir) if base_dir else app_dir()
+    CSV_PATH = base / "patterns.csv"
+    PDF_DIR = base / "docs" / "patterns"
+    OUTPUT_DIR = base / "docs"
+    OUTPUT_FILE = OUTPUT_DIR / "index.html"
+
     # 读取数据
     patterns = load_patterns(CSV_PATH)
     print(f"📖 读取到 {len(patterns)} 张图纸")
@@ -697,12 +703,16 @@ def main():
     html = build_html(patterns)
 
     # 写入文件
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(html)
 
     print(f"✅ 网页已生成: {OUTPUT_FILE}")
     print(f"   共 {len(patterns)} 张图纸")
+
+
+def main():
+    generate()
 
 
 if __name__ == "__main__":
