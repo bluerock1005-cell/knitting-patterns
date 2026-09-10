@@ -762,6 +762,7 @@ class FlowLayout(QLayout):
 
     def addItem(self, item):
         self._items.append(item)
+        self.invalidate()
 
     def count(self):
         return len(self._items)
@@ -773,6 +774,7 @@ class FlowLayout(QLayout):
 
     def takeAt(self, index):
         if 0 <= index < len(self._items):
+            self.invalidate()
             return self._items.pop(index)
         return None
 
@@ -1537,6 +1539,8 @@ class PatternManager(QMainWindow):
         self.patterns = load_patterns()
         self.selected_pattern = None
         self._populate_cards(self.patterns)
+        # 新图纸插在最前面，网格重建后回到顶部，否则新卡片还在可视区上方
+        self.cards_scroll.verticalScrollBar().setValue(0)
 
     def _refresh_card_states(self):
         """Update card generated badges without rebuilding (fixes flash)"""
@@ -1595,10 +1599,30 @@ class PatternManager(QMainWindow):
                 w.setParent(None)
                 w.deleteLater()
         self.pattern_cards = []
+        self.cards_flow_layout.invalidate()
+
+    def _relayout_cards(self):
+        """重建卡片后强制重新布局。
+
+        FlowLayout 增删卡片后不会自己 invalidate；当新卡片数量没让行数变化时，
+        连容器尺寸都不变，Qt 就不会再下发几何信息，新卡片会停在默认位置 (0,0)
+        叠在第一格上（表现为新图纸没有出现在第一个），所以这里主动重排一次。
+        """
+        self.cards_flow_layout.invalidate()
+        self.cards_flow_layout.activate()
+        # 容器高度可能停在旧值（滚动条范围随之失效），按当前宽度重算一次
+        width = self.cards_container.width()
+        if width > 0:
+            needed = max(
+                self.cards_flow_layout.heightForWidth(width),
+                self.cards_scroll.viewport().height(),
+            )
+            if needed > 0 and self.cards_container.height() != needed:
+                self.cards_container.resize(width, needed)
+        self.cards_container.update()
 
     def _populate_cards(self, data):
         """用图纸数据重建卡片瀑布流网格"""
-        self.cards_container.setUpdatesEnabled(False)
         self.cards_container.setUpdatesEnabled(False)
         generated_files = self._get_generated_filenames()
         self._clear_cards()
@@ -1633,9 +1657,7 @@ class PatternManager(QMainWindow):
         else:
             self.status_label.setText(f"共 {total_count} 张图纸  |  尚未生成网页")
         self.cards_container.setUpdatesEnabled(True)
-        self.cards_container.update()
-        self.cards_container.setUpdatesEnabled(True)
-        self.cards_container.update()
+        self._relayout_cards()
 
     def _select_card(self, pattern):
         """点击卡片时选中它（更新高亮状态，供编辑/删除按钮使用）"""
