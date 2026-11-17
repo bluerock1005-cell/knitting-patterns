@@ -37,8 +37,9 @@ import json
 import os
 import re
 import shutil
+import tempfile
 
-# ─── 路径常量（打包后统一指向 .exe 所在目录，数据才不会被临时目录清掉）───
+# ─── 路径常量（开发模式与 exe 使用同一份持久化图纸库）───
 from appbase import app_dir
 APP_DIR = app_dir()
 CSV_PATH = APP_DIR / "patterns.csv"
@@ -126,12 +127,43 @@ def load_patterns():
 
 
 def save_patterns(patterns):
-    """保存图纸列表到 CSV"""
-    with open(CSV_PATH, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        for p in patterns:
-            writer.writerow({k: p.get(k, "") for k in FIELDNAMES})
+    """完整写入临时文件后替换 CSV，写入失败时保留原清单。"""
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=CSV_PATH.parent,
+            prefix=".patterns-", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            writer = csv.DictWriter(stream, fieldnames=FIELDNAMES)
+            writer.writeheader()
+            for pattern in patterns:
+                writer.writerow({key: pattern.get(key, "") for key in FIELDNAMES})
+        os.replace(temporary_path, CSV_PATH)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def remove_pattern(filename, delete_pdf=False):
+    """移除最新清单中的匹配记录，PDF 删除失败时恢复记录。"""
+    patterns = load_patterns()
+    remaining = [pattern for pattern in patterns if pattern["filename"] != filename]
+    pdf_path = (PDF_DIR / filename).resolve()
+    if delete_pdf and not pdf_path.is_relative_to(PDF_DIR.resolve()):
+        raise ValueError("PDF 路径超出图纸文件夹，无法删除。")
+
+    has_entry = len(remaining) != len(patterns)
+    if has_entry:
+        save_patterns(remaining)
+    try:
+        if delete_pdf:
+            pdf_path.unlink(missing_ok=True)
+    except OSError:
+        if has_entry:
+            save_patterns(patterns)
+        raise
+    return remaining
 
 
 def read_pdf_title(pdf_path):
@@ -664,22 +696,24 @@ class PatternDialog(QDialog):
 #  后台任务线程
 # ═══════════════════════════════════════════
 
-class CommandThread(QThread):
-    """在后台运行命令，避免界面卡死"""
+class SiteUpdateThread(QThread):
+    """在同一后台线程中依次生成网页、提交图纸资料并推送。"""
     output = pyqtSignal(str)
     finished_signal = pyqtSignal(bool, str)
 
-    def __init__(self, cmd, cwd=None):
+    def __init__(self, base_dir, publish=False):
         super().__init__()
-        self.cmd = cmd
-        self.cwd = cwd or str(APP_DIR)
+        self.base_dir = Path(base_dir).resolve()
+        self.publish = publish
 
-    def run(self):
+    def _git(self, *args, allowed_codes=(0,)):
+        command = ["git", *args]
+        self.output.emit(f"$ {' '.join(command)}")
         try:
-            self.output.emit(f"$ {' '.join(self.cmd)}\n")
-            proc = subprocess.Popen(
-                self.cmd,
-                cwd=self.cwd,
+            result = subprocess.run(
+                command,
+                cwd=str(self.base_dir),
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -687,15 +721,44 @@ class CommandThread(QThread):
                 errors="replace",
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
-            for line in proc.stdout:
-                self.output.emit(line)
-            proc.wait()
-            if proc.returncode == 0:
-                self.finished_signal.emit(True, "完成")
-            else:
-                self.finished_signal.emit(False, f"退出码: {proc.returncode}")
-        except FileNotFoundError:
-            self.finished_signal.emit(False, "命令未找到，请检查是否已安装")
+        except FileNotFoundError as error:
+            raise RuntimeError("找不到 Git，请安装 Git 并重新打开管理器。") from error
+        if result.returncode not in allowed_codes:
+            detail = result.stdout.strip() or f"退出码 {result.returncode}"
+            raise RuntimeError(f"{' '.join(command)}\n{detail}")
+        return result
+
+    def _publish(self):
+        repository = self._git("rev-parse", "--show-toplevel").stdout.strip()
+        if Path(repository).resolve() != self.base_dir:
+            raise RuntimeError(
+                f"当前图纸库位于 {self.base_dir}\n"
+                f"Git 仓库根目录为 {repository}\n"
+                "请将程序放到仓库根目录或其 dist 子目录，使用根目录的 patterns.csv 和 docs。"
+            )
+        self._git("remote", "get-url", "origin")
+        self._git("symbolic-ref", "--short", "HEAD")
+        self._git("add", "-A", "--", "patterns.csv", "docs")
+        changes = self._git(
+            "diff", "--cached", "--quiet", "--", "patterns.csv", "docs",
+            allowed_codes=(0, 1),
+        )
+        if changes.returncode == 1:
+            from datetime import datetime
+            message = f"更新图纸库 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            self._git("commit", "-m", message, "--only", "--", "patterns.csv", "docs")
+        self._git("push", "-u", "origin", "HEAD")
+
+    def run(self):
+        try:
+            self.output.emit("正在生成网页…")
+            import generate_site
+            generate_site.generate(self.base_dir)
+            message = "网页已生成"
+            if self.publish:
+                self._publish()
+                message = "网页已生成并推送 GitHub，等待 GitHub Pages 部署"
+            self.finished_signal.emit(True, message)
         except Exception as e:
             self.finished_signal.emit(False, str(e))
 
@@ -703,23 +766,6 @@ class CommandThread(QThread):
 # ═══════════════════════════════════════════
 #  Ravelry 异步抓取线程
 # ═══════════════════════════════════════════
-
-class GenerateThread(QThread):
-    """后台直接调用 generate_site.generate()，取代原先的子进程调用。"""
-    finished_signal = pyqtSignal(bool, str)
-
-    def __init__(self, base_dir):
-        super().__init__()
-        self.base_dir = base_dir
-
-    def run(self):
-        try:
-            import generate_site
-            generate_site.generate(str(self.base_dir))
-            self.finished_signal.emit(True, "网页已生成")
-        except Exception as e:
-            self.finished_signal.emit(False, str(e))
-
 
 class RavelryFetchThread(QThread):
     """后台抓取 Ravelry 数据，避免界面卡死"""
@@ -1239,26 +1285,22 @@ class PdfFileTab(QWidget):
         has_csv_entry = len(matched) > 0
 
         # 构建确认信息
-        msg = f"确定要删除 \"{filename}\" 吗？\n\n该操作会删除 PDF 文件本身。"
+        msg = f"确定要删除 \"{filename}\" 吗？\n\nPDF 删除后不会进入回收站。"
         if has_csv_entry:
-            msg += f"\n\n此图纸已在 patterns.csv 中录入，将同步删除图纸记录。"
+            msg += "\n\n将同时删除对应图纸记录。"
+        msg += "\n\n删除后点击「推送 GitHub」同步网站。"
 
         reply = QMessageBox.question(
             self, "确认删除", msg,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
         try:
-            # 删除 PDF 文件
-            if pdf_path.exists():
-                pdf_path.unlink()
-
-            # 联动删除 patterns.csv 中的记录
+            remove_pattern(filename, delete_pdf=True)
             if has_csv_entry:
-                all_patterns = [p for p in all_patterns if p.get("filename") != filename]
-                save_patterns(all_patterns)
                 # 刷新主窗口的卡片列表
                 if self.window() and hasattr(self.window(), "_reload_table"):
                     self.window()._reload_table()
@@ -1266,9 +1308,13 @@ class PdfFileTab(QWidget):
             self.refresh()
             if self.window() and hasattr(self.window(), "status_label"):
                 if has_csv_entry:
-                    self.window().status_label.setText(f"✅ 已删除 PDF 及图纸记录: {filename}")
+                    self.window().status_label.setText(
+                        f"✅ 已删除 PDF 及图纸记录: {filename}，点击「推送 GitHub」同步网站"
+                    )
                 else:
-                    self.window().status_label.setText(f"✅ 已删除: {filename}")
+                    self.window().status_label.setText(
+                        f"✅ 已删除: {filename}，点击「推送 GitHub」同步网站"
+                    )
         except Exception as e:
             QMessageBox.warning(self, "删除失败", f"无法删除文件:\n{e}")
 
@@ -1335,7 +1381,7 @@ class PatternManager(QMainWindow):
         self.setMinimumSize(960, 640)
         self.resize(1100, 700)
         self.patterns = []
-        self.cmd_thread = None
+        self.site_thread = None
 
         self._apply_style()
         self._build_ui()
@@ -1745,22 +1791,51 @@ class PatternManager(QMainWindow):
 
     def _delete_pattern_data(self, pattern):
         """删除指定图纸（卡片上的删除按钮 也走这里）"""
-        reply = QMessageBox.question(
-            self, "确认删除",
-            f"确定要删除 '{pattern['title']}' 吗？\n\n"
-            f"（PDF 文件不会被删除，只从清单中移除）",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        choice = QMessageBox(self)
+        choice.setWindowTitle("删除图纸")
+        choice.setIcon(QMessageBox.Icon.Question)
+        choice.setTextFormat(Qt.TextFormat.PlainText)
+        choice.setText(f"如何处理「{pattern['title']}」？")
+        choice.setInformativeText(
+            "移出图纸库会保留 PDF，以后可通过「扫描文件夹」重新收录。\n"
+            "保留的 PDF 在推送后仍可通过原下载链接访问。\n\n"
+            "处理后点击「推送 GitHub」同步网站。"
         )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.patterns = [
-                p for p in self.patterns
-                if p["filename"] != pattern["filename"]
-            ]
-            if self.selected_pattern and self.selected_pattern.get("filename") == pattern["filename"]:
-                self.selected_pattern = None
-            save_patterns(self.patterns)
-            self._populate_cards_from_search()
-            self.status_label.setText(f"✅ 已删除: {pattern['title']}")
+        remove_button = choice.addButton("移出图纸库", QMessageBox.ButtonRole.AcceptRole)
+        delete_button = choice.addButton("删除图纸和 PDF", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_button = choice.addButton("取消", QMessageBox.ButtonRole.RejectRole)
+        choice.setDefaultButton(remove_button)
+        choice.setEscapeButton(cancel_button)
+        choice.exec()
+
+        clicked_button = choice.clickedButton()
+        if clicked_button not in (remove_button, delete_button):
+            return
+        delete_pdf = clicked_button is delete_button
+        if delete_pdf:
+            reply = QMessageBox.question(
+                self, "确认删除图纸和 PDF",
+                f"将删除「{pattern['title']}」的图纸记录及 PDF 文件：\n"
+                f"{pattern['filename']}\n\nPDF 删除后不会进入回收站。\n\n确定继续吗？",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+
+        try:
+            self.patterns = remove_pattern(pattern["filename"], delete_pdf=delete_pdf)
+        except Exception as error:
+            QMessageBox.warning(self, "删除失败", str(error))
+            return
+        if self.selected_pattern and self.selected_pattern.get("filename") == pattern["filename"]:
+            self.selected_pattern = None
+        self._populate_cards_from_search()
+        self.pdf_tab.refresh()
+        action = "已删除图纸和 PDF" if delete_pdf else "已移出图纸库，保留 PDF"
+        self.status_label.setText(
+            f"✅ {action}: {pattern['title']}，点击「推送 GitHub」同步网站"
+        )
 
     def _populate_cards_from_search(self):
         """按当前搜索关键词重新渲染卡片网格（保留搜索状态，而不是清空搜索）"""
@@ -1818,87 +1893,48 @@ class PatternManager(QMainWindow):
             self._reload_table()
             self.status_label.setText(f"✅ 已添加 {len(new_pdfs)} 张图纸，请补充分类和类型等信息")
 
-    def _run_generate(self, on_done):
-        """后台生成网页；完成后回调 on_done(ok, msg)。"""
-        self.gen_thread = GenerateThread(APP_DIR)
-        self.gen_thread.finished_signal.connect(on_done)
-        self.gen_thread.start()
+    def _start_site_update(self, publish=False):
+        """执行期间暂停资料编辑，确保 CSV 与生成网页使用同一份数据。"""
+        if self.site_thread is not None and self.site_thread.isRunning():
+            return
+        self.centralWidget().setEnabled(False)
+        self.setAcceptDrops(False)
+        self.site_thread = SiteUpdateThread(APP_DIR, publish=publish)
+        self.site_thread.output.connect(self.status_label.setText)
+        self.site_thread.finished_signal.connect(self._on_generate_done)
+        self.site_thread.start()
 
     def _generate_site(self):
         """生成网页"""
-        self.btn_generate.setEnabled(False)
         self.status_label.setText("正在生成网页…")
-        self._run_generate(self._on_generate_done)
+        self._start_site_update()
 
     def _push_github(self):
         """生成网页并推送到 GitHub"""
-        self.btn_push.setEnabled(False)
         self.status_label.setText("正在生成网页并推送到 GitHub…")
-        self._run_generate(self._after_generate_for_push)
-
-    def _after_generate_for_push(self, ok, msg):
-        if ok:
-            self._do_git_commands()
-        else:
-            self._on_generate_done(ok, msg)
+        self._start_site_update(publish=True)
 
     def _on_generate_done(self, ok, msg):
         """网页生成完成回调：刷新表格以更新生成状态标记"""
         self._refresh_card_states()  # 刷新表格，让已生成的行变绿
         self._on_command_done(ok, msg)
 
-    def _do_git_commands(self):
-        """执行 git add, commit, push"""
-        git_thread = CommandThread(["git", "add", "-A"])
-        git_thread.finished_signal.connect(
-            lambda ok, msg: self._git_commit() if ok else self._on_command_done(ok, msg)
-        )
-        git_thread.output.connect(
-            lambda text: self.status_label.setText(text.strip() or self.status_label.text())
-        )
-        git_thread.start()
-        self.cmd_thread = git_thread
-
-    def _git_commit(self):
-        """git commit"""
-        from datetime import datetime
-        msg = f"更新图纸库 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        commit_thread = CommandThread(["git", "commit", "-m", msg])
-        self._commit_output = []
-        commit_thread.output.connect(
-            lambda text: self._commit_output.append(text)
-        )
-        commit_thread.finished_signal.connect(self._on_commit_done)
-        commit_thread.start()
-        self.cmd_thread = commit_thread
-
-    def _on_commit_done(self, ok, msg):
-        """git commit 完成回调"""
-        output_text = "".join(self._commit_output) if hasattr(self, "_commit_output") else ""
-        if ok:
-            self._git_push()
-        elif "nothing to commit" in output_text or "没有要提交的更改" in output_text:
-            self.status_label.setText("没有新变更，直接推送…")
-            self._git_push()
-        else:
-            self._on_command_done(ok, msg)
-
-    def _git_push(self):
-        """git push"""
-        push_thread = CommandThread(["git", "push"])
-        push_thread.finished_signal.connect(self._on_command_done)
-        push_thread.start()
-        self.cmd_thread = push_thread
-
     def _on_command_done(self, ok, msg):
         """命令执行完成回调"""
-        self.btn_generate.setEnabled(True)
-        self.btn_push.setEnabled(True)
+        self.centralWidget().setEnabled(True)
+        self.setAcceptDrops(True)
         if ok:
             self.status_label.setText(f"✅ {msg}")
         else:
             self.status_label.setText(f"❌ 失败: {msg}")
-            QMessageBox.warning(self, "操作失败", f"命令执行失败:\n{msg}\n\n如果推送失败，请检查是否已配置 GitHub 远程仓库。")
+            QMessageBox.warning(self, "操作失败", msg)
+
+    def closeEvent(self, event):
+        if self.site_thread is not None and self.site_thread.isRunning():
+            self.status_label.setText("正在生成或推送网页，请等待操作完成后关闭。")
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     # ─── 拖拽上传 ───
 

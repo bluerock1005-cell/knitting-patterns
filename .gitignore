@@ -9,6 +9,9 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
+# 本机快捷方式（包含本地绝对路径）
+/编织图纸管理器.lnk
+
 # IDE
 .vscode/
 .idea/

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 # Windows 控制台 UTF-8
-if sys.stdout.encoding != "utf-8":
+if sys.stdout is not None and sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 # ─── 路径常量（供其他模块引用）───

@@ -13,7 +13,7 @@ from pathlib import Path
 from appbase import app_dir
 
 # Windows 控制台 UTF-8 输出
-if sys.stdout.encoding != "utf-8":
+if sys.stdout is not None and sys.stdout.encoding != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 # ─── 分类中文映射（可选，留空则直接显示原始值）───
@@ -680,7 +680,7 @@ def build_html(patterns):
 def generate(base_dir=None):
     """根据 patterns.csv 生成 docs/index.html。
 
-    base_dir: 数据根目录。打包成 .exe 后由 manager 传入 .exe 所在目录，
+    base_dir: 数据根目录。打包成 .exe 后由 manager 传入找到的图纸库目录，
     确保生成的网站与 CSV/PDF 放在一起。开发模式可省略（自动取脚本目录）。
     """
     base = Path(base_dir) if base_dir else app_dir()
